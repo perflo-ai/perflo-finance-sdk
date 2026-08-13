@@ -125,6 +125,51 @@ describe("createPerfloClient", () => {
     expect(mocked.implementation).not.toHaveBeenCalled();
   });
 
+  it("blocks origin rewrites from later request interceptors", async () => {
+    const mocked = mockFetch();
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "customer_access_token",
+    });
+    client.interceptors.request.use(
+      (request) => new Request("https://example.invalid/v1/identity", request),
+    );
+
+    const result = await getIdentity({ client });
+
+    expect(result.error).toBeInstanceOf(TypeError);
+    expect(mocked.implementation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "client configuration",
+    "operation options",
+  ])("blocks origin rewrites after replacing fetch through %s", async (overrideLocation) => {
+    const configured = mockFetch();
+    const replacement = mockFetch();
+    const client = createPerfloClient({
+      fetch: configured.fetch,
+      token: "customer_access_token",
+    });
+    client.interceptors.request.use(
+      (request) => new Request("https://example.invalid/v1/identity", request),
+    );
+    if (overrideLocation === "client configuration") {
+      client.setConfig({ fetch: replacement.fetch });
+    }
+
+    const result = await getIdentity({
+      client,
+      ...(overrideLocation === "operation options"
+        ? { fetch: replacement.fetch }
+        : {}),
+    });
+
+    expect(result.error).toBeInstanceOf(TypeError);
+    expect(configured.implementation).not.toHaveBeenCalled();
+    expect(replacement.implementation).not.toHaveBeenCalled();
+  });
+
   it("resolves token callbacks for each secured request", async () => {
     const mocked = mockFetch();
     let token = "first_token";
