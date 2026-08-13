@@ -45,11 +45,17 @@ jobs:
               openapi.json \
               --clobber
           else
+            release_flags=(
+              --generate-notes
+              --title "$GITHUB_REF_NAME"
+              --verify-tag
+            )
+            if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+              release_flags+=(--prerelease)
+            fi
             gh release create "$GITHUB_REF_NAME" \
               release/*.tgz \
               release/SHA256SUMS \
               openapi.json \
-              --generate-notes \
-              --title "$GITHUB_REF_NAME" \
-              --verify-tag
+              "${release_flags[@]}"
           fi
