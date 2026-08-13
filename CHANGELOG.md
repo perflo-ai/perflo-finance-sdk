@@ -2,6 +2,10 @@
 
 This changelog records user-visible changes to `@perflo/finance-sdk`.
 
+## 0.1.0-beta.3 - 2026-08-14
+
+- Added a portable SHA-256 checksum manifest to preview releases
+
 ## 0.1.0-beta.2 - 2026-08-14
 
 - Rebuilt the preview with the patched SDK generator dependency chain
