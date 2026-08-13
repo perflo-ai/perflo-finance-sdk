@@ -14,7 +14,7 @@
     "type": "git",
     "url": "git+https://github.com/perflo-ai/perflo-finance-sdk.git"
   },
-  "homepage": "https://apidocs.perflo.ai/get-started/typescript-sdk",
+  "homepage": "https://docs.perflo.ai/developers/get-started/typescript-sdk",
   "bugs": {
     "url": "https://github.com/perflo-ai/perflo-finance-sdk/issues"
   },

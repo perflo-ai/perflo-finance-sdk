@@ -45,7 +45,7 @@ HTTP failures return through `error` and `response`. A network or Fetch failure 
 
 Persist the exact body, confirmation intent ID, and idempotency key before a financial write. The SDK does not create these controls, retry requests, refresh tokens, or reconcile uncertain submissions.
 
-If a problem response sets `submission_uncertain` to `true`, stop replacement writes and reconcile the recorded operation. Read the [TypeScript SDK guide](https://apidocs.perflo.ai/get-started/typescript-sdk) for the transfer flow and recovery rules.
+If a problem response sets `submission_uncertain` to `true`, stop replacement writes and reconcile the recorded operation. Read the [TypeScript SDK guide](https://docs.perflo.ai/developers/get-started/typescript-sdk) for the transfer flow and recovery rules.
 
 ## Update the contract
 

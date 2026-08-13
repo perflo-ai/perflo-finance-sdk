@@ -419,7 +419,7 @@ describe("generated operations", () => {
       status: 504,
       submission_uncertain: true,
       title: "Provider timeout",
-      type: "https://apidocs.perflo.ai/problems/provider-timeout",
+      type: "https://api-gateway.perflo.ai/problems/provider_timeout",
     };
     const mocked = mockFetch((_request, call) =>
       call === 1
@@ -459,7 +459,7 @@ describe("generated operations", () => {
       status: 429,
       submission_uncertain: false,
       title: "Rate limit exceeded",
-      type: "https://apidocs.perflo.ai/problems/rate-limited",
+      type: "https://api-gateway.perflo.ai/problems/rate_limited",
     };
     const provider = {
       error: { code: "too_many_requests", message: "Slow down" },
