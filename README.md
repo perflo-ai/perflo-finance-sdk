@@ -7,8 +7,8 @@ Use `@perflo/finance-sdk` from a Node.js backend to call the Perflo Finance API 
 Set the release location once in your shell:
 
 ```bash
-sdk_version="v0.1.0-beta.3"
-sdk_archive="perflo-finance-sdk-0.1.0-beta.3.tgz"
+sdk_version="v0.1.0-beta.4"
+sdk_archive="perflo-finance-sdk-0.1.0-beta.4.tgz"
 sdk_releases="https://github.com/perflo-ai/perflo-finance-sdk/releases"
 ```
 
