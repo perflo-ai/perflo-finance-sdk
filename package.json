@@ -1,0 +1,54 @@
+{
+  "name": "@perflo/finance-sdk",
+  "version": "0.0.0-development",
+  "description": "TypeScript SDK for the Perflo Finance API",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.18.0",
+    "pnpm": ">=10.16.0"
+  },
+  "packageManager": "pnpm@11.5.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/perflo-ai/perflo-finance-sdk.git"
+  },
+  "homepage": "https://apidocs.perflo.ai/get-started/typescript-sdk",
+  "bugs": {
+    "url": "https://github.com/perflo-ai/perflo-finance-sdk/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "generate": "openapi-ts && node scripts/patch-cli-error-unions.mjs",
+    "format": "biome check --write .",
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node tests/fixtures/node-esm.mjs",
+    "prepack": "pnpm run generate && pnpm run build",
+    "pack:check": "node scripts/check-package.mjs",
+    "ci": "pnpm run generate && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run pack:check"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.11",
+    "@hey-api/openapi-ts": "0.99.0",
+    "@types/node": "26.1.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

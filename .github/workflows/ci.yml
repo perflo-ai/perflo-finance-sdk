@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24.16.0"
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate, test, and package the SDK
+        run: pnpm run ci
+      - name: Audit the published dependency surface
+        run: pnpm audit --prod --audit-level moderate
+      - name: Verify registry signatures
+        run: pnpm audit signatures
+      - name: List dependency licenses
+        run: pnpm licenses list --dev --long

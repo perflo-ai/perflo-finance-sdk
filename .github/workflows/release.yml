@@ -1,0 +1,47 @@
+name: Release preview tarball
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24.16.0"
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Set the package version from the tag
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+      - name: Generate, test, and package the SDK
+        run: pnpm run ci
+      - name: Build the release archive
+        run: |
+          mkdir release
+          pnpm pack --pack-destination release
+          sha256sum release/*.tgz > release/SHA256SUMS
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release/*.tgz \
+            release/SHA256SUMS \
+            openapi.json \
+            --generate-notes \
+            --title "$GITHUB_REF_NAME" \
+            --verify-tag
