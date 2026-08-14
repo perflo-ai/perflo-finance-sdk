@@ -93,10 +93,12 @@ function assertRequestPolicy(request: Request, origin: string): void {
   if (new URL(request.url).origin !== origin) {
     throw new TypeError("request URL must use the configured API origin");
   }
-  if (request.credentials !== "omit") {
+  // workerd omits this browser-only property and has no ambient credential store.
+  const credentials: unknown = request.credentials;
+  if (credentials !== undefined && credentials !== "omit") {
     throw new TypeError("requests must omit ambient credentials");
   }
-  if (request.redirect !== "error") {
+  if (request.redirect !== "manual") {
     throw new TypeError("requests must not follow redirects");
   }
 }
@@ -251,7 +253,7 @@ function createPolicyFetch({
         Authorization: authorization,
       },
       method: "POST",
-      redirect: "error",
+      redirect: "manual",
     });
 
     let refreshResponse: Response;
@@ -311,7 +313,7 @@ function hasInvalidRequestOverride(
   return (
     overridesOrigin ||
     (options.credentials !== undefined && options.credentials !== "omit") ||
-    (options.redirect !== undefined && options.redirect !== "error")
+    (options.redirect !== undefined && options.redirect !== "manual")
   );
 }
 
@@ -426,7 +428,7 @@ export function createPerfloClient(
       Accept: "application/json, application/problem+json;q=0.9",
     },
     responseStyle: "fields",
-    redirect: "error",
+    redirect: "manual",
     throwOnError: false,
   };
 
@@ -443,7 +445,7 @@ export function createPerfloClient(
       baseUrl,
       credentials: "omit",
       fetch: publicFetch,
-      redirect: "error",
+      redirect: "manual",
     },
   });
   client.refreshAgentToken = () => generatedRefreshAgentToken({ client });

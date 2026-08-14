@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import { dirname, resolve } from "node:path";
@@ -101,4 +102,42 @@ if (violations.length > 0) {
   throw new Error(
     `workerd-incompatible Node imports found:\n${violations.join("\n")}`,
   );
+}
+
+function runNodeCheck(args, errorMessage) {
+  const result = spawnSync(process.execPath, args, {
+    cwd: packageDirectory,
+    stdio: "inherit",
+  });
+  if (result.error !== undefined) {
+    throw new Error(errorMessage, { cause: result.error });
+  }
+  if (result.status !== 0) {
+    process.exitCode = result.status ?? 1;
+    return false;
+  }
+  return true;
+}
+
+if (process.argv[2] === undefined) {
+  const typecheckPassed = runNodeCheck(
+    [
+      resolve(packageDirectory, "node_modules/typescript/bin/tsc"),
+      "--noEmit",
+      "-p",
+      resolve(packageDirectory, "tests/tsconfig.workerd.json"),
+    ],
+    "Cannot start the workerd smoke typecheck",
+  );
+  if (typecheckPassed) {
+    runNodeCheck(
+      [
+        resolve(packageDirectory, "node_modules/vitest/vitest.mjs"),
+        "run",
+        "--config",
+        resolve(packageDirectory, "tests/vitest.workerd.config.ts"),
+      ],
+      "Cannot start the workerd runtime smoke",
+    );
+  }
 }
