@@ -34,7 +34,8 @@
     "access": "public"
   },
   "scripts": {
-    "generate": "openapi-ts && node scripts/patch-cli-error-unions.mjs && node scripts/generate-auth-policy.mjs",
+    "generate": "openapi-ts && node scripts/patch-cli-error-unions.mjs && node scripts/patch-sdk-result-contract.mjs && node scripts/generate-auth-policy.mjs",
+    "docs:reference": "node scripts/generate-sdk-reference.mjs",
     "format": "biome check --write .",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit -p tsconfig.json",

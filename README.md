@@ -7,8 +7,8 @@ Use `@perflo/finance-sdk` from Node.js, browsers, or Cloudflare Workers to call 
 Set the release location once in your shell:
 
 ```bash
-sdk_version="v0.1.0-beta.6"
-sdk_archive="perflo-finance-sdk-0.1.0-beta.6.tgz"
+sdk_version="v0.1.0-beta.7"
+sdk_archive="perflo-finance-sdk-0.1.0-beta.7.tgz"
 sdk_releases="https://github.com/perflo-ai/perflo-finance-sdk/releases"
 ```
 
@@ -40,6 +40,8 @@ const { data, error, response } = await getIdentity({ client });
 ```
 
 HTTP failures return through `error` and `response`. A network or Fetch failure returns through `error` without a response. Response headers remain available through `response.headers`.
+
+Generated operations always return field-style results. Set `throwOnError` on an individual operation when exception-based handling is useful. Shared `responseStyle` and `throwOnError` changes are rejected because they would invalidate generated return types. Direct transport methods can still select either result style per call.
 
 The client omits ambient browser credentials and never follows redirects. Redirects return through `error` and `response` as non-ok results. Node.js and Cloudflare Workers preserve the 3xx status; browsers expose the Fetch-standard opaque redirect response.
 
@@ -88,10 +90,10 @@ if (isSubmissionUncertain(result.error)) {
 - `submission_uncertain !== true`
 - `problem.code` does not start with `idempotency_`
 
-If a problem response sets `submission_uncertain` to `true`, stop replacement writes and reconcile the recorded operation. Read the [TypeScript SDK guide](https://docs.perflo.ai/developers/get-started/typescript-sdk) for the transfer flow and recovery rules.
+If a problem response sets `submission_uncertain` to `true`, stop replacement writes and reconcile the recorded operation. Read the [TypeScript SDK guide](https://docs.perflo.ai/developers/get-started/typescript-sdk) for the transfer flow and recovery rules. Use the [TypeScript SDK reference](https://docs.perflo.ai/developers/reference/typescript-sdk) for the complete client and generated operation surface.
 
 ## Update the contract
 
-Replace `openapi.json` with the reviewed Perflo Finance contract and open a pull request. Continuous integration generates the client, compiles the public API, runs runtime and type tests, and validates the package tarball.
+Replace `openapi.json` with the reviewed Perflo Finance contract and open a pull request. Continuous integration generates the client, compiles the public API, runs runtime and type tests, and validates the package tarball. Regenerate and check the SDK-owned method matrix in the sibling docs repository as described in the [contribution guide](https://github.com/perflo-ai/perflo-finance-sdk/blob/master/CONTRIBUTING.md); ordinary package builds never modify it automatically.
 
 An explicit SemVer tag creates a GitHub Release. The release workflow derives the package version from the tag, regenerates the SDK, and attaches the validated tarball and checksum.

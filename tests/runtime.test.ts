@@ -85,6 +85,119 @@ function jsonResponse(
 }
 
 describe("createPerfloClient", () => {
+  it.each([
+    ["responseStyle", { responseStyle: "data" as const }],
+    ["throwOnError", { throwOnError: true as const }],
+  ])("rejects shared %s changes atomically", (_name, invalid) => {
+    const client = createPerfloClient();
+    const before = client.getConfig();
+
+    expect(() =>
+      client.setConfig({
+        ...invalid,
+        headers: { "X-Rejected-Mutation": "yes" },
+      } as never),
+    ).toThrow(TypeError);
+
+    const after = client.getConfig();
+    expect(after).toMatchObject({
+      responseStyle: "fields",
+      throwOnError: false,
+    });
+    expect(after.fetch).toBe(before.fetch);
+    expect(
+      new Headers(after.headers as HeadersInit).has("X-Rejected-Mutation"),
+    ).toBe(false);
+  });
+
+  it("keeps fields and non-throwing defaults when shared options are undefined", () => {
+    const client = createPerfloClient();
+
+    const configured = client.setConfig({
+      headers: { "X-Allowed-Mutation": "yes" },
+      responseStyle: undefined,
+      throwOnError: undefined,
+    });
+
+    expect(configured).toMatchObject({
+      responseStyle: "fields",
+      throwOnError: false,
+    });
+    expect(
+      new Headers(configured.headers as HeadersInit).get("X-Allowed-Mutation"),
+    ).toBe("yes");
+  });
+
+  it("keeps generated results field-style and direct data results available", async () => {
+    const mocked = mockFetch(() => jsonResponse({ actor_type: "agent" }));
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "pfa_agent_pairing_token",
+    });
+
+    const generated = await getIdentity({
+      client,
+      responseStyle: "data",
+    } as never);
+    const direct = await client.get<
+      { 200: { actor_type: string } },
+      never,
+      false,
+      "data"
+    >({ responseStyle: "data", url: "/v1/identity" });
+
+    expect(generated).toMatchObject({
+      data: { actor_type: "agent" },
+      response: expect.any(Response),
+    });
+    expect(direct).toEqual({ actor_type: "agent" });
+  });
+
+  it("supports per-call throwing without changing generated defaults", async () => {
+    const error = problemDetails({ code: "validation_error", status: 422 });
+    const mocked = mockFetch(() => jsonResponse(error, 422));
+    const client = createPerfloClient({ fetch: mocked.fetch });
+
+    await expect(getIdentity({ client, throwOnError: true })).rejects.toEqual(
+      error,
+    );
+
+    const returned = await getIdentity({ client });
+    expect(returned.data).toBeUndefined();
+    expect(returned.error).toEqual(error);
+    expect(returned.response?.status).toBe(422);
+    expect(client.getConfig()).toMatchObject({
+      responseStyle: "fields",
+      throwOnError: false,
+    });
+  });
+
+  it("keeps per-call data mode on direct transport requests", async () => {
+    const identity = { actor_type: "agent" };
+    const error = problemDetails({ status: 422 });
+    const mocked = mockFetch((_request, call) =>
+      call === 1 ? jsonResponse(identity) : jsonResponse(error, 422),
+    );
+    const client = createPerfloClient({ fetch: mocked.fetch });
+
+    const success = await client.get<
+      { 200: typeof identity },
+      { 422: ProblemDetails },
+      false,
+      "data"
+    >({ responseStyle: "data", url: "/v1/identity" });
+    const failure = await client.get<
+      { 200: typeof identity },
+      { 422: ProblemDetails },
+      false,
+      "data"
+    >({ responseStyle: "data", url: "/v1/identity" });
+
+    expect(success).toEqual(identity);
+    expect(failure).toBeUndefined();
+    expect(client.getConfig().responseStyle).toBe("fields");
+  });
+
   it("uses the production origin and canonicalizes origin or /v1 base URLs", async () => {
     const production = mockFetch();
     const local = mockFetch();
@@ -312,6 +425,33 @@ describe("createPerfloClient", () => {
 });
 
 describe("agent token refresh", () => {
+  it("keeps the explicit refresh helper non-throwing and field-style", async () => {
+    const refreshed = agentRefreshResponse("pfa_original_token");
+    const mocked = mockFetch((_request, call) =>
+      call === 1
+        ? jsonResponse(refreshed)
+        : jsonResponse(problemDetails(), 401),
+    );
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "pfa_original_token",
+    });
+
+    const success = await client.refreshAgentToken();
+    const failure = await client.refreshAgentToken();
+
+    expect(success.data).toEqual(refreshed);
+    expect(success.request).toBeInstanceOf(Request);
+    expect(success.response?.status).toBe(200);
+    expect(failure.data).toBeUndefined();
+    expect(failure.error).toMatchObject({ code: "authentication_required" });
+    expect(failure.response?.status).toBe(401);
+    expect(client.getConfig()).toMatchObject({
+      responseStyle: "fields",
+      throwOnError: false,
+    });
+  });
+
   it("refreshes a 401 and retries the exact purchase request once", async () => {
     const purchaseBodies: Array<Array<number>> = [];
     let purchaseAttempt = 0;

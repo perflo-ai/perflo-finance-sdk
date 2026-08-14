@@ -16,10 +16,24 @@ pnpm install --frozen-lockfile
 
 Replace `openapi.json` with the reviewed contract from the canonical API repository. Do not edit generated files because the repository ignores `src/generated` and `dist`.
 
-Run the complete package check:
+When `perflo-docs` is checked out beside this repository, regenerate the SDK first, then update only the generated region of its TypeScript SDK reference:
+
+```bash
+pnpm run generate
+pnpm run docs:reference -- \
+  --write ../perflo-docs/developers/reference/typescript-sdk.mdx
+pnpm run docs:reference -- \
+  --check ../perflo-docs/developers/reference/typescript-sdk.mdx
+```
+
+The explicit page path is required. The SDK command never modifies a sibling repository during a normal build. Commit the regenerated reference in the paired docs pull request.
+
+Run the complete package check and repeat the real-page reference check before opening the SDK pull request:
 
 ```bash
 pnpm run ci
+pnpm run docs:reference -- \
+  --check ../perflo-docs/developers/reference/typescript-sdk.mdx
 ```
 
 Open a pull request that describes contract additions, removals, and generated TypeScript breaking changes.
