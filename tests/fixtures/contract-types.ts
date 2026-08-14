@@ -9,6 +9,7 @@ import {
   createPerfloClient,
   createTransfer,
   type DevicesError,
+  getIdentity,
   type IdentityView,
   listActivity,
   listServices,
@@ -16,6 +17,8 @@ import {
   type PollDeviceError,
   type ProblemDetails,
   type PurchaseCreate,
+  type RefreshAgentTokenError,
+  type RefreshAgentTokenResponse,
   type RefreshTokenError,
   type ResolveOperationApprovalData,
   type RevokeTokenError,
@@ -127,6 +130,55 @@ export function narrowDevicePoll(response: CliDevicePollResponse): string {
 const client = createPerfloClient();
 
 export const refreshAgentTokenResult = client.refreshAgentToken();
+type RefreshHelperResult = Awaited<typeof refreshAgentTokenResult>;
+export type RefreshHelperDataIsFieldStyle = Assert<
+  Equal<RefreshHelperResult["data"], RefreshAgentTokenResponse | undefined>
+>;
+export type RefreshHelperErrorIsFieldStyle = Assert<
+  Equal<RefreshHelperResult["error"], RefreshAgentTokenError | undefined>
+>;
+export const directDataResult = client.get<
+  { 200: IdentityView },
+  never,
+  false,
+  "data"
+>({ responseStyle: "data", url: "/v1/identity" });
+export type DirectDataResultIsTyped = Assert<
+  Equal<typeof directDataResult, Promise<IdentityView | undefined>>
+>;
+export const directThrowingDataResult = client.get<
+  { 200: IdentityView },
+  { 422: ProblemDetails },
+  true,
+  "data"
+>({
+  responseStyle: "data",
+  throwOnError: true,
+  url: "/v1/identity",
+});
+export type DirectThrowingDataResultIsTyped = Assert<
+  Equal<typeof directThrowingDataResult, Promise<IdentityView>>
+>;
+export const throwingIdentity = getIdentity({ client, throwOnError: true });
+type ThrowingIdentityResult = Awaited<typeof throwingIdentity>;
+export type ThrowingIdentityHasData = Assert<
+  Equal<ThrowingIdentityResult["data"], IdentityView>
+>;
+export type ThrowingIdentityHasNoError = Assert<
+  Equal<"error" extends keyof ThrowingIdentityResult ? true : false, false>
+>;
+export const explicitFieldIdentity = getIdentity({
+  client,
+  responseStyle: "fields",
+});
+type ExplicitFieldIdentityResult = Awaited<typeof explicitFieldIdentity>;
+export type ExplicitFieldIdentityData = Assert<
+  Equal<ExplicitFieldIdentityResult["data"], IdentityView | undefined>
+>;
+export type ExplicitFieldIdentityError = Assert<
+  Equal<ExplicitFieldIdentityResult["error"], ProblemDetails | undefined>
+>;
+client.setConfig({ responseStyle: "fields", throwOnError: false });
 export const listedActivity = listActivity({ client });
 export const listedServices = listServices({ client });
 export const createKycWithoutBody = createKycSession({ client });
@@ -139,6 +191,21 @@ export const closeCardWithoutBody = closeCard({
   },
   path: { card_id: "card_id" },
 });
+
+getIdentity({
+  client,
+  // @ts-expect-error Generated operations always use field-style results.
+  responseStyle: "data",
+});
+
+// @ts-expect-error Shared configuration cannot invalidate generated results.
+client.setConfig({ responseStyle: "data" });
+
+// @ts-expect-error Shared configuration cannot invalidate generated results.
+client.setConfig({ throwOnError: true });
+
+// @ts-expect-error The explicit refresh helper accepts no result overrides.
+client.refreshAgentToken({ responseStyle: "data" });
 
 // @ts-expect-error Money amounts are never JSON numbers.
 export const invalidMoney: Money = { amount: 1, currency: "USD" };

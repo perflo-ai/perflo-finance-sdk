@@ -2,6 +2,14 @@
 
 This changelog records user-visible changes to `@perflo/finance-sdk`.
 
+## 0.1.0-beta.7 - 2026-08-14
+
+- Made generated operation results type-safe by enforcing field-style responses
+  after caller options
+- Prevented shared response and error configuration from invalidating generated
+  operation and explicit refresh return types
+- Added the complete generated TypeScript SDK method-reference tooling
+
 ## 0.1.0-beta.6 - 2026-08-14
 
 - Fixed authenticated requests in Cloudflare Workers by using the portable

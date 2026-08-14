@@ -29,12 +29,27 @@ export interface PerfloClientOptions {
   token?: PerfloToken;
 }
 
-export type PerfloClient = Client & {
+type PerfloClientConfigUpdate = Omit<
+  Config,
+  "responseStyle" | "throwOnError"
+> & {
+  responseStyle?: "fields";
+  throwOnError?: false;
+};
+
+type PerfloClientConfig = Omit<Config, "responseStyle" | "throwOnError"> & {
+  responseStyle: "fields";
+  throwOnError: false;
+};
+
+export type PerfloClient = Omit<Client, "getConfig" | "setConfig"> & {
+  getConfig: () => PerfloClientConfig;
   refreshAgentToken: () => RequestResult<
     RefreshAgentTokenResponses,
     RefreshAgentTokenErrors,
     false
   >;
+  setConfig: (config: PerfloClientConfigUpdate) => PerfloClientConfig;
 };
 
 const HTTP_METHODS = [
@@ -385,6 +400,24 @@ function enforceClientMethods(client: Client, policy: RequestPolicy): Client {
     client.sse[methodName] = ((options) =>
       method(applyRequestPolicy(options, policy, methodName))) as typeof method;
   }
+
+  const setConfig = client.setConfig;
+  client.setConfig = ((config) => {
+    if (
+      (config.responseStyle !== undefined &&
+        config.responseStyle !== "fields") ||
+      (config.throwOnError !== undefined && config.throwOnError !== false)
+    ) {
+      throw new TypeError(
+        "shared responseStyle and throwOnError must preserve generated operation results",
+      );
+    }
+    return setConfig({
+      ...config,
+      responseStyle: "fields",
+      throwOnError: false,
+    });
+  }) as typeof setConfig;
   return client;
 }
 
@@ -436,7 +469,7 @@ export function createPerfloClient(
     config.auth = tokenState.resolve;
   }
 
-  const client = createClient(config) as PerfloClient;
+  const client = createClient(config);
   enforceRequestPolicy(client, baseUrl);
   enforceClientMethods(client, {
     authenticatedFetch,
@@ -448,6 +481,12 @@ export function createPerfloClient(
       redirect: "manual",
     },
   });
-  client.refreshAgentToken = () => generatedRefreshAgentToken({ client });
-  return client;
+  const perfloClient = client as PerfloClient;
+  perfloClient.refreshAgentToken = () =>
+    generatedRefreshAgentToken({
+      client: perfloClient,
+      responseStyle: "fields",
+      throwOnError: false,
+    });
+  return perfloClient;
 }
