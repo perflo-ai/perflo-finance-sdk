@@ -27,6 +27,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Generate, test, and package the SDK
         run: pnpm run ci
+      - name: Verify workerd compatibility
+        run: pnpm run check:workerd
       - name: Audit the published dependency surface
         run: pnpm audit --prod --audit-level moderate
       - name: Verify registry signatures

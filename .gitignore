@@ -21,6 +21,8 @@
 !/vitest.config.ts
 
 /.agent-state/
+/AGENTS.md
+/CLAUDE.md
 /dist/
 /node_modules/
 /src/generated/
