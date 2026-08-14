@@ -39,12 +39,13 @@
     "format": "biome check --write .",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
+    "test": "pnpm run generate && pnpm run build && vitest run",
+    "test:live": "node scripts/live-api.ts",
     "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node tests/fixtures/node-esm.mjs && pnpm run check:workerd",
     "check:workerd": "node scripts/check-workerd.mjs",
     "prepack": "pnpm run generate && pnpm run build",
     "pack:check": "node scripts/check-package.mjs",
-    "ci": "pnpm run generate && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run pack:check"
+    "ci": "pnpm run generate && pnpm run lint && pnpm run typecheck && pnpm run build && vitest run && pnpm run pack:check"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.11",

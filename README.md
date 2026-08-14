@@ -40,7 +40,11 @@ const client = createPerfloClient({
 const { data, error, response } = await getIdentity({ client });
 
 if (isProblemDetails(error)) {
-  console.error(error.code, error.detail);
+  console.error(error.code, error.detail, response?.status);
+} else if (error) {
+  console.error("The identity request failed", response?.status, error);
+} else if (data) {
+  console.log(data.actor_type, data.subject, data.wallet);
 }
 ```
 

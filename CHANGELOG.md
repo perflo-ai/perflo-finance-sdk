@@ -2,6 +2,12 @@
 
 This changelog records user-visible changes to `@perflo/finance-sdk`.
 
+## Unreleased
+
+- Added a production API exercise for customer device authorization, Perflo
+  connection, capability-gated reads, quotes, webhooks, and opt-in journaled
+  mutations
+
 ## 0.1.0-beta.9 - 2026-08-14
 
 - Typed non-throwing operation errors as `unknown` to cover HTTP bodies, decode

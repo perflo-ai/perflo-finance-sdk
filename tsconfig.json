@@ -19,6 +19,12 @@
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src", "tests", "vitest.config.ts", "openapi-ts.config.ts"],
+  "include": [
+    "src",
+    "tests",
+    "scripts/live-api.ts",
+    "vitest.config.ts",
+    "openapi-ts.config.ts"
+  ],
   "exclude": ["tests/workerd-runtime.workerd.ts"]
 }
