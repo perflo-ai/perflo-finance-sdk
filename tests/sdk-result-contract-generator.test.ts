@@ -40,8 +40,26 @@ export const getWidget = <ThrowOnError extends boolean = false>(
     ...options,
   });
 `;
+const clientSource = `if (
+          response.status === 204 ||
+          response.headers.get("Content-Length") === "0"
+        ) {
+  return {};
+}
+
+switch (parseAs) {
+  case "json": {
+            // Some servers return 200 with no Content-Length and empty body.
+            // response.json() would throw; read as text and parse if non-empty.
+            const text = await response.text();
+            data = text ? JSON.parse(text) : {};
+            break;
+          }
+}
+`;
 
 interface Fixture {
+  clientPath: string;
   directory: string;
   sdkPath: string;
 }
@@ -50,8 +68,10 @@ async function createFixture(): Promise<Fixture> {
   const directory = await mkdtemp(join(tmpdir(), "perflo-result-contract-"));
   temporaryDirectories.push(directory);
   const generatedDirectory = resolve(directory, "src/generated");
+  const clientDirectory = resolve(generatedDirectory, "client");
+  const clientPath = resolve(clientDirectory, "client.gen.ts");
   const sdkPath = resolve(generatedDirectory, "sdk.gen.ts");
-  await mkdir(generatedDirectory, { recursive: true });
+  await mkdir(clientDirectory, { recursive: true });
   await Promise.all([
     writeFile(
       resolve(directory, "openapi.json"),
@@ -63,9 +83,10 @@ async function createFixture(): Promise<Fixture> {
         },
       }),
     ),
+    writeFile(clientPath, clientSource),
     writeFile(sdkPath, sdkSource),
   ]);
-  return { directory, sdkPath };
+  return { clientPath, directory, sdkPath };
 }
 
 async function runPatch(fixture: Fixture) {
@@ -86,29 +107,35 @@ afterEach(async () => {
 });
 
 describe("SDK result contract patch", () => {
-  it("forces field results and narrows generated and shared options", async () => {
+  it("forces JSON field results and strict non-204 decoding", async () => {
     const fixture = await createFixture();
 
     const first = await runPatch(fixture);
+    const firstClient = await readFile(fixture.clientPath, "utf8");
     const firstSdk = await readFile(fixture.sdkPath, "utf8");
     const second = await runPatch(fixture);
 
     expect(first.stdout).toContain(
-      "Enforced field-style results for 1 generated operations",
+      "Enforced JSON field results for 1 generated operations",
     );
     expect(second.stdout).toContain(
-      "Enforced field-style results for 1 generated operations",
+      "Enforced JSON field results for 1 generated operations",
     );
     expect(firstSdk).toContain(
-      '    ...options,\n    responseStyle: "fields",\n',
+      '    ...options,\n    parseAs: "json",\n    responseStyle: "fields",\n',
     );
     expect(firstSdk).toContain(
-      'Omit<Options2<TData, ThrowOnError, TResponse>, "responseStyle">',
+      'Omit<\n  Options2<TData, ThrowOnError, TResponse>,\n  "parseAs" | "responseStyle"\n>',
     );
     expect(firstSdk).toContain(
       'type GeneratedOperationClient = Omit<Client, "getConfig" | "setConfig">',
     );
+    expect(firstSdk).toContain('parseAs?: "json";');
     expect(firstSdk).toContain('responseStyle?: "fields";');
+    expect(firstClient).toContain("if (response.status === 204) {");
+    expect(firstClient).not.toContain('headers.get("Content-Length")');
+    expect(firstClient).toContain("data = await response.json();");
+    expect(firstClient).not.toContain("data = text ? JSON.parse(text) : {};");
   });
 
   it("rejects an OpenAPI and generated SDK operation mismatch", async () => {
@@ -136,9 +163,7 @@ describe("SDK result contract patch", () => {
     );
 
     await expect(runPatch(fixture)).rejects.toMatchObject({
-      stderr: expect.stringContaining(
-        "must force responseStyle to fields last",
-      ),
+      stderr: expect.stringContaining("must force JSON field results last"),
     });
   });
 
@@ -152,6 +177,23 @@ describe("SDK result contract patch", () => {
     await expect(runPatch(fixture)).rejects.toMatchObject({
       stderr: expect.stringContaining(
         "Generated operation Options type mismatch",
+      ),
+    });
+  });
+
+  it("rejects an unknown generated JSON success parser", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      fixture.clientPath,
+      clientSource.replace(
+        "data = text ? JSON.parse(text) : {};",
+        "data = text;",
+      ),
+    );
+
+    await expect(runPatch(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "Generated JSON success handling mismatch",
       ),
     });
   });

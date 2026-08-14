@@ -2,6 +2,13 @@
 
 This changelog records user-visible changes to `@perflo/finance-sdk`.
 
+## 0.1.0-beta.8 - 2026-08-14
+
+- Enforced declared JSON decoding for every generated operation
+- Returned empty or malformed non-204 successful responses as decode errors
+  with their HTTP response instead of fabricated successful data
+- Preserved `204` as undefined data and JSON `null` as null data
+
 ## 0.1.0-beta.7 - 2026-08-14
 
 - Made generated operation results type-safe by enforcing field-style responses

@@ -198,6 +198,12 @@ getIdentity({
   responseStyle: "data",
 });
 
+getIdentity({
+  client,
+  // @ts-expect-error Generated operations always parse their declared JSON result.
+  parseAs: "text",
+});
+
 // @ts-expect-error Shared configuration cannot invalidate generated results.
 client.setConfig({ responseStyle: "data" });
 

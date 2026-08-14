@@ -11,6 +11,7 @@ const outputDirectory = resolve(
   process.env.PERFLO_SDK_OUTPUT ?? "src/generated",
 );
 const sdkPath = resolve(outputDirectory, "sdk.gen.ts");
+const clientPath = resolve(outputDirectory, "client/client.gen.ts");
 const operationMethods = new Set([
   "delete",
   "get",
@@ -45,13 +46,17 @@ export type Options<
   TData extends TDataShape = TDataShape,
   ThrowOnError extends boolean = boolean,
   TResponse = unknown,
-> = Omit<Options2<TData, ThrowOnError, TResponse>, "responseStyle"> & {
+> = Omit<
+  Options2<TData, ThrowOnError, TResponse>,
+  "parseAs" | "responseStyle"
+> & {
   /**
    * You can provide a client instance returned by \`createClient()\` instead of
    * individual options. This might be also useful if you want to implement a
    * custom client.
    */
   client: GeneratedOperationClient;
+  parseAs?: "json";
   responseStyle?: "fields";
   /**
    * You can pass arbitrary values through the \`meta\` object. This can be
@@ -215,24 +220,34 @@ function patchSdk(source, expectedOperations) {
   const insertions = [];
   for (const [name, declaration] of declarations) {
     const object = operationCallObject(name, declaration);
+    const parseProperties = object.properties.filter(
+      (property) => objectPropertyName(property) === "parseAs",
+    );
     const responseProperties = object.properties.filter(
       (property) => objectPropertyName(property) === "responseStyle",
     );
-    if (responseProperties.length > 1) {
+    if (parseProperties.length > 1 || responseProperties.length > 1) {
       throw new TypeError(
-        `Generated operation ${name} has duplicate responseStyle properties`,
+        `Generated operation ${name} has duplicate result-contract properties`,
       );
     }
-    if (responseProperties.length === 1) {
-      const property = responseProperties[0];
+    if (parseProperties.length === 1 || responseProperties.length === 1) {
+      const parseProperty = parseProperties[0];
+      const responseProperty = responseProperties[0];
       if (
-        !ts.isPropertyAssignment(property) ||
-        !ts.isStringLiteral(property.initializer) ||
-        property.initializer.text !== "fields" ||
-        object.properties.at(-1) !== property
+        parseProperty === undefined ||
+        responseProperty === undefined ||
+        !ts.isPropertyAssignment(parseProperty) ||
+        !ts.isStringLiteral(parseProperty.initializer) ||
+        parseProperty.initializer.text !== "json" ||
+        !ts.isPropertyAssignment(responseProperty) ||
+        !ts.isStringLiteral(responseProperty.initializer) ||
+        responseProperty.initializer.text !== "fields" ||
+        object.properties.at(-2) !== parseProperty ||
+        object.properties.at(-1) !== responseProperty
       ) {
         throw new TypeError(
-          `Generated operation ${name} must force responseStyle to fields last`,
+          `Generated operation ${name} must force JSON field results last`,
         );
       }
       continue;
@@ -263,7 +278,7 @@ function patchSdk(source, expectedOperations) {
     }
     insertions.push({
       position: closingBrace,
-      text: `  responseStyle: "fields",\n${closingIndent}`,
+      text: `  parseAs: "json",\n${closingIndent}  responseStyle: "fields",\n${closingIndent}`,
     });
   }
 
@@ -273,6 +288,36 @@ function patchSdk(source, expectedOperations) {
     patched = `${patched.slice(0, insertion.position)}${insertion.text}${patched.slice(insertion.position)}`;
   }
   return patched;
+}
+
+const unpatchedEmptySuccess = `if (
+          response.status === 204 ||
+          response.headers.get("Content-Length") === "0"
+        ) {`;
+const patchedEmptySuccess = `if (response.status === 204) {`;
+const unpatchedJsonSuccess = `case "json": {
+            // Some servers return 200 with no Content-Length and empty body.
+            // response.json() would throw; read as text and parse if non-empty.
+            const text = await response.text();
+            data = text ? JSON.parse(text) : {};
+            break;
+          }`;
+const patchedJsonSuccess = `case "json":
+            data = await response.json();
+            break;`;
+
+function patchClient(source) {
+  return replaceInvariant(
+    replaceInvariant(
+      source,
+      unpatchedEmptySuccess,
+      patchedEmptySuccess,
+      "empty success handling",
+    ),
+    unpatchedJsonSuccess,
+    patchedJsonSuccess,
+    "JSON success handling",
+  );
 }
 
 function replaceInvariant(source, unpatched, patched, name) {
@@ -291,13 +336,20 @@ function replaceInvariant(source, unpatched, patched, name) {
 
 const document = JSON.parse(await readFile(openApiPath, "utf8"));
 const expectedOperations = openApiOperationNames(document);
-const sdkSource = await readFile(sdkPath, "utf8");
+const [sdkSource, clientSource] = await Promise.all([
+  readFile(sdkPath, "utf8"),
+  readFile(clientPath, "utf8"),
+]);
 
 const patchedSdk = patchSdk(sdkSource, expectedOperations);
-if (patchedSdk !== sdkSource) {
-  await writeFile(sdkPath, patchedSdk);
-}
+const patchedClient = patchClient(clientSource);
+await Promise.all([
+  patchedSdk === sdkSource ? undefined : writeFile(sdkPath, patchedSdk),
+  patchedClient === clientSource
+    ? undefined
+    : writeFile(clientPath, patchedClient),
+]);
 
 console.log(
-  `Enforced field-style results for ${expectedOperations.size} generated operations`,
+  `Enforced JSON field results for ${expectedOperations.size} generated operations`,
 );

@@ -7,8 +7,8 @@ Use `@perflo/finance-sdk` from Node.js, browsers, or Cloudflare Workers to call 
 Set the release location once in your shell:
 
 ```bash
-sdk_version="v0.1.0-beta.7"
-sdk_archive="perflo-finance-sdk-0.1.0-beta.7.tgz"
+sdk_version="v0.1.0-beta.8"
+sdk_archive="perflo-finance-sdk-0.1.0-beta.8.tgz"
 sdk_releases="https://github.com/perflo-ai/perflo-finance-sdk/releases"
 ```
 
@@ -42,6 +42,8 @@ const { data, error, response } = await getIdentity({ client });
 HTTP failures return through `error` and `response`. A network or Fetch failure returns through `error` without a response. Response headers remain available through `response.headers`.
 
 Generated operations always return field-style results. Set `throwOnError` on an individual operation when exception-based handling is useful. Shared `responseStyle` and `throwOnError` changes are rejected because they would invalidate generated return types. Direct transport methods can still select either result style per call.
+
+Generated operations decode their declared successful response as JSON regardless of the server's `Content-Type`. An empty or malformed non-`204` success returns a decode error with its HTTP response instead of fabricated data. A `204` result has `data: undefined`, while a JSON `null` remains `data: null`.
 
 The client omits ambient browser credentials and never follows redirects. Redirects return through `error` and `response` as non-ok results. Node.js and Cloudflare Workers preserve the 3xx status; browsers expose the Fetch-standard opaque redirect response.
 

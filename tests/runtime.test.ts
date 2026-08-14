@@ -1315,6 +1315,81 @@ describe("generated operations", () => {
     expect(result.response?.status).toBe(204);
   });
 
+  it.each([
+    [
+      "HTML",
+      () =>
+        new Response("<!doctype html><title>Unexpected success</title>", {
+          headers: { "Content-Type": "text/html" },
+          status: 200,
+        }),
+    ],
+    [
+      "an empty body",
+      () =>
+        new Response("", {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        }),
+    ],
+    [
+      "an explicit zero-length body",
+      () =>
+        new Response(null, {
+          headers: {
+            "Content-Length": "0",
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        }),
+    ],
+  ])("returns a decode error for $0 on a JSON operation", async (_name, response) => {
+    const mocked = mockFetch(response);
+
+    const result = await getIdentity({
+      client: createPerfloClient({ fetch: mocked.fetch, token: "token" }),
+    });
+
+    expect(result.data).toBeUndefined();
+    expect(result.error).toBeInstanceOf(SyntaxError);
+    expect(result.response?.status).toBe(200);
+  });
+
+  it.each([
+    [
+      "HTML",
+      () =>
+        new Response("<!doctype html><title>Unexpected success</title>", {
+          headers: { "Content-Type": "text/html" },
+          status: 202,
+        }),
+    ],
+    [
+      "an empty body",
+      () =>
+        new Response("", {
+          headers: { "Content-Type": "application/json" },
+          status: 202,
+        }),
+    ],
+  ])("does not accept $0 as a successful financial mutation", async (_name, response) => {
+    const mocked = mockFetch(response);
+
+    const result = await createTransfer({
+      body: { quote_id: "transfer_quote" },
+      client: createPerfloClient({ fetch: mocked.fetch, token: "token" }),
+      headers: {
+        "Confirmation-Intent-ID": "confirmation_intent",
+        "Idempotency-Key": "idempotency_key",
+      },
+    });
+
+    expect(mocked.implementation).toHaveBeenCalledTimes(1);
+    expect(result.data).toBeUndefined();
+    expect(result.error).toBeInstanceOf(SyntaxError);
+    expect(result.response?.status).toBe(202);
+  });
+
   it("preserves a JSON null success body", async () => {
     const mocked = mockFetch(() => jsonResponse(null));
 
