@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["workerd-runtime.workerd.ts"],
+  "exclude": []
+}

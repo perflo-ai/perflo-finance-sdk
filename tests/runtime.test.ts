@@ -192,6 +192,22 @@ describe("createPerfloClient", () => {
     expect(mocked.implementation).not.toHaveBeenCalled();
   });
 
+  it("blocks credential rewrites from later request interceptors", async () => {
+    const mocked = mockFetch();
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "customer_access_token",
+    });
+    client.interceptors.request.use(
+      (request) => new Request(request, { credentials: "include" }),
+    );
+
+    const result = await getIdentity({ client });
+
+    expect(result.error).toBeInstanceOf(TypeError);
+    expect(mocked.implementation).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["protected to public", getIdentity, "/v1/public-config"],
     ["public to protected", publicConfig, "/v1/identity"],
@@ -270,7 +286,7 @@ describe("createPerfloClient", () => {
     });
 
     expect(mocked.requests[0]?.credentials).toBe("omit");
-    expect(mocked.requests[0]?.redirect).toBe("error");
+    expect(mocked.requests[0]?.redirect).toBe("manual");
     expect(mocked.requests[0]?.headers.get("Accept")).toBe(
       "application/json, application/problem+json;q=0.9",
     );
@@ -278,6 +294,7 @@ describe("createPerfloClient", () => {
 
   it.each([
     { credentials: "include" as const },
+    { redirect: "error" as const },
     { redirect: "follow" as const },
   ])("blocks per-operation request policy overrides", async (override) => {
     const mocked = mockFetch();
@@ -347,6 +364,13 @@ describe("agent token refresh", () => {
       "Bearer pfa_expired_token",
       "Bearer pfa_expired_token",
       "Bearer pfa_expired_token",
+    ]);
+    expect(
+      mocked.requests.map((request) => [request.credentials, request.redirect]),
+    ).toEqual([
+      ["omit", "manual"],
+      ["omit", "manual"],
+      ["omit", "manual"],
     ]);
   });
 
@@ -1127,8 +1151,10 @@ describe("generated operations", () => {
         client,
       });
 
-      expect(transfer.error).toBeInstanceOf(TypeError);
-      expect(refresh.error).toBeInstanceOf(TypeError);
+      expect(transfer.error).toEqual({});
+      expect(transfer.response?.status).toBe(307);
+      expect(refresh.error).toEqual({});
+      expect(refresh.response?.status).toBe(307);
       expect(redirectedRequests).toBe(0);
     } finally {
       await new Promise<void>((resolve, reject) => {

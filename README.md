@@ -7,8 +7,8 @@ Use `@perflo/finance-sdk` from Node.js, browsers, or Cloudflare Workers to call 
 Set the release location once in your shell:
 
 ```bash
-sdk_version="v0.1.0-beta.4"
-sdk_archive="perflo-finance-sdk-0.1.0-beta.4.tgz"
+sdk_version="v0.1.0-beta.6"
+sdk_archive="perflo-finance-sdk-0.1.0-beta.6.tgz"
 sdk_releases="https://github.com/perflo-ai/perflo-finance-sdk/releases"
 ```
 
@@ -40,6 +40,8 @@ const { data, error, response } = await getIdentity({ client });
 ```
 
 HTTP failures return through `error` and `response`. A network or Fetch failure returns through `error` without a response. Response headers remain available through `response.headers`.
+
+The client omits ambient browser credentials and never follows redirects. Redirects return through `error` and `response` as non-ok results. Node.js and Cloudflare Workers preserve the 3xx status; browsers expose the Fetch-standard opaque redirect response.
 
 When a `pfa_` agent token is configured, automatic agent-token refresh is on by default. An authenticated `401` calls `POST /v1/agent-tokens/refresh` through the raw Fetch layer and retries the original request once after a valid response. The retry preserves the serialized body, `Idempotency-Key`, and `Idempotency-Replay-Not-After`. A failed refresh or second `401` returns the original result. If the retry response is lost, the retry's transport error is returned because the request may have reached the server. Set `autoRefreshToken: false` to disable this policy.
 
