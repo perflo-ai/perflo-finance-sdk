@@ -7,6 +7,7 @@ export {
 } from "./client.js";
 export {
   isDefinitiveNoOperation,
+  isProblemDetails,
   isSubmissionUncertain,
 } from "./errors.js";
 export * from "./generated/index.js";

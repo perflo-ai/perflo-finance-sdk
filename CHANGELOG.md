@@ -2,6 +2,14 @@
 
 This changelog records user-visible changes to `@perflo/finance-sdk`.
 
+## 0.1.0-beta.9 - 2026-08-14
+
+- Typed non-throwing operation errors as `unknown` to cover HTTP bodies, decode
+  failures, request-construction failures, and Fetch failures honestly
+- Added `isProblemDetails` for narrowing errors before reading problem fields
+- Documented that throw mode raises raw decode errors without attaching the
+  HTTP response
+
 ## 0.1.0-beta.8 - 2026-08-14
 
 - Enforced declared JSON decoding for every generated operation

@@ -57,9 +57,20 @@ switch (parseAs) {
           }
 }
 `;
+const clientTypesSource = `export type RequestResult<
+  TData = unknown,
+  TError = unknown,
+> = {
+  data: undefined;
+  error: TError extends Record<string, unknown>
+                  ? TError[keyof TError]
+                  : TError;
+};
+`;
 
 interface Fixture {
   clientPath: string;
+  clientTypesPath: string;
   directory: string;
   sdkPath: string;
 }
@@ -70,6 +81,7 @@ async function createFixture(): Promise<Fixture> {
   const generatedDirectory = resolve(directory, "src/generated");
   const clientDirectory = resolve(generatedDirectory, "client");
   const clientPath = resolve(clientDirectory, "client.gen.ts");
+  const clientTypesPath = resolve(clientDirectory, "types.gen.ts");
   const sdkPath = resolve(generatedDirectory, "sdk.gen.ts");
   await mkdir(clientDirectory, { recursive: true });
   await Promise.all([
@@ -84,9 +96,10 @@ async function createFixture(): Promise<Fixture> {
       }),
     ),
     writeFile(clientPath, clientSource),
+    writeFile(clientTypesPath, clientTypesSource),
     writeFile(sdkPath, sdkSource),
   ]);
-  return { clientPath, directory, sdkPath };
+  return { clientPath, clientTypesPath, directory, sdkPath };
 }
 
 async function runPatch(fixture: Fixture) {
@@ -112,6 +125,7 @@ describe("SDK result contract patch", () => {
 
     const first = await runPatch(fixture);
     const firstClient = await readFile(fixture.clientPath, "utf8");
+    const firstClientTypes = await readFile(fixture.clientTypesPath, "utf8");
     const firstSdk = await readFile(fixture.sdkPath, "utf8");
     const second = await runPatch(fixture);
 
@@ -136,6 +150,8 @@ describe("SDK result contract patch", () => {
     expect(firstClient).not.toContain('headers.get("Content-Length")');
     expect(firstClient).toContain("data = await response.json();");
     expect(firstClient).not.toContain("data = text ? JSON.parse(text) : {};");
+    expect(firstClientTypes).toContain("_TError = unknown");
+    expect(firstClientTypes).toContain("error: unknown;");
   });
 
   it("rejects an OpenAPI and generated SDK operation mismatch", async () => {
@@ -195,6 +211,21 @@ describe("SDK result contract patch", () => {
       stderr: expect.stringContaining(
         "Generated JSON success handling mismatch",
       ),
+    });
+  });
+
+  it("rejects an unknown generated field error shape", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      fixture.clientTypesPath,
+      clientTypesSource.replace(
+        "error: TError extends Record<string, unknown>",
+        "error: TError",
+      ),
+    );
+
+    await expect(runPatch(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining("Generated field error type mismatch"),
     });
   });
 });

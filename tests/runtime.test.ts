@@ -11,6 +11,7 @@ import {
   getIdentity,
   getPurchase,
   isDefinitiveNoOperation,
+  isProblemDetails,
   isSubmissionUncertain,
   PERFLO_API_ORIGIN,
   pollDevice,
@@ -1041,6 +1042,26 @@ describe("purchase quote idempotency", () => {
 });
 
 describe("submission uncertainty helpers", () => {
+  it("narrows complete problem details", () => {
+    const problem: unknown = problemDetails({ code: "validation_error" });
+
+    expect(isProblemDetails(problem)).toBe(true);
+    if (!isProblemDetails(problem)) {
+      throw new Error("Expected problem details");
+    }
+    expect(problem.code).toBe("validation_error");
+  });
+
+  it.each([
+    ["null", null],
+    ["an array", []],
+    ["a missing required field", { ...problemDetails(), detail: undefined }],
+    ["a non-integer status", problemDetails({ status: 401.5 })],
+    ["a non-object field error", problemDetails({ fields: [null] as never })],
+  ])("rejects %s as problem details", (_name, value) => {
+    expect(isProblemDetails(value)).toBe(false);
+  });
+
   it.each([
     [
       "422 validation problem",
@@ -1353,6 +1374,40 @@ describe("generated operations", () => {
     expect(result.data).toBeUndefined();
     expect(result.error).toBeInstanceOf(SyntaxError);
     expect(result.response?.status).toBe(200);
+  });
+
+  it.each([
+    [
+      "HTML",
+      () =>
+        new Response("<!doctype html><title>Unexpected success</title>", {
+          headers: { "Content-Type": "text/html" },
+          status: 200,
+        }),
+    ],
+    [
+      "an empty body",
+      () =>
+        new Response("", {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        }),
+    ],
+  ])("throws the raw decode error for $0 in throw mode", async (_name, response) => {
+    const mocked = mockFetch(response);
+    let caught: unknown;
+
+    try {
+      await getIdentity({
+        client: createPerfloClient({ fetch: mocked.fetch, token: "token" }),
+        throwOnError: true,
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(SyntaxError);
+    expect(caught).not.toHaveProperty("response");
   });
 
   it.each([

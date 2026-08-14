@@ -12,6 +12,7 @@ const outputDirectory = resolve(
 );
 const sdkPath = resolve(outputDirectory, "sdk.gen.ts");
 const clientPath = resolve(outputDirectory, "client/client.gen.ts");
+const clientTypesPath = resolve(outputDirectory, "client/types.gen.ts");
 const operationMethods = new Set([
   "delete",
   "get",
@@ -305,6 +306,16 @@ const unpatchedJsonSuccess = `case "json": {
 const patchedJsonSuccess = `case "json":
             data = await response.json();
             break;`;
+const unpatchedErrorParameter = `export type RequestResult<
+  TData = unknown,
+  TError = unknown,`;
+const patchedErrorParameter = `export type RequestResult<
+  TData = unknown,
+  _TError = unknown,`;
+const unpatchedFieldError = `error: TError extends Record<string, unknown>
+                  ? TError[keyof TError]
+                  : TError;`;
+const patchedFieldError = `error: unknown;`;
 
 function patchClient(source) {
   return replaceInvariant(
@@ -317,6 +328,20 @@ function patchClient(source) {
     unpatchedJsonSuccess,
     patchedJsonSuccess,
     "JSON success handling",
+  );
+}
+
+function patchClientTypes(source) {
+  return replaceInvariant(
+    replaceInvariant(
+      source,
+      unpatchedErrorParameter,
+      patchedErrorParameter,
+      "request error parameter",
+    ),
+    unpatchedFieldError,
+    patchedFieldError,
+    "field error type",
   );
 }
 
@@ -336,18 +361,23 @@ function replaceInvariant(source, unpatched, patched, name) {
 
 const document = JSON.parse(await readFile(openApiPath, "utf8"));
 const expectedOperations = openApiOperationNames(document);
-const [sdkSource, clientSource] = await Promise.all([
+const [sdkSource, clientSource, clientTypesSource] = await Promise.all([
   readFile(sdkPath, "utf8"),
   readFile(clientPath, "utf8"),
+  readFile(clientTypesPath, "utf8"),
 ]);
 
 const patchedSdk = patchSdk(sdkSource, expectedOperations);
 const patchedClient = patchClient(clientSource);
+const patchedClientTypes = patchClientTypes(clientTypesSource);
 await Promise.all([
   patchedSdk === sdkSource ? undefined : writeFile(sdkPath, patchedSdk),
   patchedClient === clientSource
     ? undefined
     : writeFile(clientPath, patchedClient),
+  patchedClientTypes === clientTypesSource
+    ? undefined
+    : writeFile(clientTypesPath, patchedClientTypes),
 ]);
 
 console.log(

@@ -17,7 +17,6 @@ import {
   type PollDeviceError,
   type ProblemDetails,
   type PurchaseCreate,
-  type RefreshAgentTokenError,
   type RefreshAgentTokenResponse,
   type RefreshTokenError,
   type ResolveOperationApprovalData,
@@ -33,6 +32,9 @@ type Equal<Left, Right> =
     ? true
     : false;
 type Assert<Condition extends true> = Condition;
+type IsAny<Value> = 0 extends 1 & Value ? true : false;
+type IsUnknown<Value> =
+  IsAny<Value> extends true ? false : unknown extends Value ? true : false;
 type IsRequired<Value, Key extends keyof Value> =
   object extends Pick<Value, Key> ? false : true;
 
@@ -135,7 +137,7 @@ export type RefreshHelperDataIsFieldStyle = Assert<
   Equal<RefreshHelperResult["data"], RefreshAgentTokenResponse | undefined>
 >;
 export type RefreshHelperErrorIsFieldStyle = Assert<
-  Equal<RefreshHelperResult["error"], RefreshAgentTokenError | undefined>
+  IsUnknown<RefreshHelperResult["error"]>
 >;
 export const directDataResult = client.get<
   { 200: IdentityView },
@@ -176,7 +178,7 @@ export type ExplicitFieldIdentityData = Assert<
   Equal<ExplicitFieldIdentityResult["data"], IdentityView | undefined>
 >;
 export type ExplicitFieldIdentityError = Assert<
-  Equal<ExplicitFieldIdentityResult["error"], ProblemDetails | undefined>
+  IsUnknown<ExplicitFieldIdentityResult["error"]>
 >;
 client.setConfig({ responseStyle: "fields", throwOnError: false });
 export const listedActivity = listActivity({ client });

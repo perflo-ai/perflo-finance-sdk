@@ -1,34 +1,35 @@
+import type { ProblemDetails } from "./generated/types.gen.js";
+
 type UnknownRecord = Record<PropertyKey, unknown>;
 
-type ProblemDocument = UnknownRecord & {
-  code: string;
-  status: number;
-  submission_uncertain: boolean;
-  title: string;
-  type: string;
-};
-
 function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isProblemDocument(value: unknown): value is ProblemDocument {
+export function isProblemDetails(value: unknown): value is ProblemDetails {
   if (!isRecord(value)) {
     return false;
   }
   return (
-    typeof value.type === "string" &&
-    typeof value.title === "string" &&
-    Number.isInteger(value.status) &&
     typeof value.code === "string" &&
-    value.code.length > 0 &&
-    typeof value.submission_uncertain === "boolean"
+    typeof value.detail === "string" &&
+    (value.fields === undefined ||
+      value.fields === null ||
+      (Array.isArray(value.fields) && value.fields.every(isRecord))) &&
+    typeof value.instance === "string" &&
+    typeof value.refresh_onboarding === "boolean" &&
+    typeof value.request_id === "string" &&
+    typeof value.retryable === "boolean" &&
+    Number.isInteger(value.status) &&
+    typeof value.submission_uncertain === "boolean" &&
+    typeof value.title === "string" &&
+    typeof value.type === "string"
   );
 }
 
 function getProblemContext(error: unknown):
   | {
-      problem: ProblemDocument;
+      problem: ProblemDetails;
       status: number;
     }
   | undefined {
@@ -44,7 +45,7 @@ function getProblemContext(error: unknown):
 
 function getProblem(error: UnknownRecord) {
   const candidate = "problem" in error ? error.problem : error;
-  return isProblemDocument(candidate) ? candidate : undefined;
+  return isProblemDetails(candidate) ? candidate : undefined;
 }
 
 export function isSubmissionUncertain(error: unknown): boolean {

@@ -7,8 +7,8 @@ Use `@perflo/finance-sdk` from Node.js, browsers, or Cloudflare Workers to call 
 Set the release location once in your shell:
 
 ```bash
-sdk_version="v0.1.0-beta.8"
-sdk_archive="perflo-finance-sdk-0.1.0-beta.8.tgz"
+sdk_version="v0.1.0-beta.9"
+sdk_archive="perflo-finance-sdk-0.1.0-beta.9.tgz"
 sdk_releases="https://github.com/perflo-ai/perflo-finance-sdk/releases"
 ```
 
@@ -30,6 +30,7 @@ Create one client for each customer or agent credential:
 import {
   createPerfloClient,
   getIdentity,
+  isProblemDetails,
 } from "@perflo/finance-sdk";
 
 const client = createPerfloClient({
@@ -37,11 +38,15 @@ const client = createPerfloClient({
 });
 
 const { data, error, response } = await getIdentity({ client });
+
+if (isProblemDetails(error)) {
+  console.error(error.code, error.detail);
+}
 ```
 
-HTTP failures return through `error` and `response`. A network or Fetch failure returns through `error` without a response. Response headers remain available through `response.headers`.
+The `error` field is `unknown` because it can contain a problem document, an unexpected HTTP body, a decode failure, a request-construction failure, or a Fetch failure. Use `isProblemDetails(error)` before reading problem fields. HTTP and decode failures return their response when one exists; request-construction, network, and Fetch failures have no response. Response headers remain available through `response.headers`.
 
-Generated operations always return field-style results. Set `throwOnError` on an individual operation when exception-based handling is useful. Shared `responseStyle` and `throwOnError` changes are rejected because they would invalidate generated return types. Direct transport methods can still select either result style per call.
+Generated operations always return field-style results. Set `throwOnError` on an individual operation when exception-based handling is useful. Throw mode throws the raw problem, decode error, request-construction error, or Fetch error; a thrown decode error does not retain its HTTP response. Keep the default non-throwing mode when response metadata is required for error handling. Shared `responseStyle` and `throwOnError` changes are rejected because they would invalidate generated return types. Direct transport methods can still select either result style per call.
 
 Generated operations decode their declared successful response as JSON regardless of the server's `Content-Type`. An empty or malformed non-`204` success returns a decode error with its HTTP response instead of fabricated data. A `204` result has `data: undefined`, while a JSON `null` remains `data: null`.
 
