@@ -10,6 +10,8 @@ import {
   createTransfer,
   type DevicesError,
   type IdentityView,
+  listActivity,
+  listServices,
   type Money,
   type PollDeviceError,
   type ProblemDetails,
@@ -124,6 +126,9 @@ export function narrowDevicePoll(response: CliDevicePollResponse): string {
 
 const client = createPerfloClient();
 
+export const refreshAgentTokenResult = client.refreshAgentToken();
+export const listedActivity = listActivity({ client });
+export const listedServices = listServices({ client });
 export const createKycWithoutBody = createKycSession({ client });
 export const connectWithoutBody = startPerfloConnection({ client });
 export const closeCardWithoutBody = closeCard({

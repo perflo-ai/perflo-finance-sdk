@@ -34,12 +34,13 @@
     "access": "public"
   },
   "scripts": {
-    "generate": "openapi-ts && node scripts/patch-cli-error-unions.mjs",
+    "generate": "openapi-ts && node scripts/patch-cli-error-unions.mjs && node scripts/generate-auth-policy.mjs",
     "format": "biome check --write .",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node tests/fixtures/node-esm.mjs",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node tests/fixtures/node-esm.mjs && pnpm run check:workerd",
+    "check:workerd": "node scripts/check-workerd.mjs",
     "prepack": "pnpm run generate && pnpm run build",
     "pack:check": "node scripts/check-package.mjs",
     "ci": "pnpm run generate && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run pack:check"

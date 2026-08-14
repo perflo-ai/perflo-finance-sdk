@@ -1,35 +1,72 @@
 import { createServer } from "node:http";
 import { describe, expect, it, vi } from "vitest";
+import type { ProblemDetails } from "../src/index.js";
 import {
   createPerfloClient,
   createPurchase,
+  createPurchaseQuote,
   createTransfer,
   deleteSubscription,
   displayCurrency,
   getIdentity,
   getPurchase,
+  isDefinitiveNoOperation,
+  isSubmissionUncertain,
+  PERFLO_API_ORIGIN,
   pollDevice,
   publicConfig,
   redeemConnectCode,
+  refreshAgentToken,
   refreshToken,
   serviceCapabilities,
   startDevice,
 } from "../src/index.js";
 
-type FetchResponder = (request: Request, call: number) => Response;
+type FetchResponder = (
+  request: Request,
+  call: number,
+) => Response | Promise<Response>;
 
 function mockFetch(responder: FetchResponder = () => jsonResponse({})) {
   const requests: Array<Request> = [];
   const implementation = vi.fn(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(input);
-    requests.push(request);
-    return responder(request, requests.length);
+    requests.push(request.clone());
+    return await responder(request, requests.length);
   });
 
   return {
     fetch: implementation as typeof globalThis.fetch,
     implementation,
     requests,
+  };
+}
+
+function problemDetails(
+  overrides: Partial<ProblemDetails> = {},
+): ProblemDetails {
+  return {
+    code: "authentication_required",
+    detail: "The request failed.",
+    fields: null,
+    instance: "/v1/identity",
+    refresh_onboarding: false,
+    request_id: "request_id",
+    retryable: false,
+    status: 401,
+    submission_uncertain: false,
+    title: "Request failed",
+    type: "https://api-gateway.perflo.ai/problems/request_failed",
+    ...overrides,
+  };
+}
+
+function agentRefreshResponse(accessToken: string) {
+  return {
+    access_token: accessToken,
+    expires_in: 86_400,
+    mandate_id: "mandate_id",
+    scopes: ["purchases:execute"],
   };
 }
 
@@ -48,12 +85,20 @@ function jsonResponse(
 }
 
 describe("createPerfloClient", () => {
-  it("uses the production origin by default and accepts a local origin", async () => {
+  it("uses the production origin and canonicalizes origin or /v1 base URLs", async () => {
     const production = mockFetch();
     const local = mockFetch();
+    const custom = mockFetch();
 
     await publicConfig({
       client: createPerfloClient({ fetch: production.fetch }),
+    });
+    await getIdentity({
+      client: createPerfloClient({
+        baseUrl: "https://api-gateway.lordofthechains.com/v1",
+        fetch: custom.fetch,
+        token: "pfa_agent_pairing_token",
+      }),
     });
     await publicConfig({
       client: createPerfloClient({
@@ -68,13 +113,19 @@ describe("createPerfloClient", () => {
     expect(local.requests[0]?.url).toBe(
       "http://127.0.0.1:8000/v1/public-config",
     );
+    expect(custom.requests[0]?.url).toBe(
+      "https://api-gateway.lordofthechains.com/v1/identity",
+    );
   });
 
   it.each([
     "relative/path",
     "ftp://api-gateway.perflo.ai",
     "https://user:password@api-gateway.perflo.ai",
-    "https://api-gateway.perflo.ai/v1",
+    "https://api-gateway.perflo.ai/v2",
+    "https://api-gateway.perflo.ai/v1/identity",
+    "https://api-gateway.perflo.ai/v1?",
+    "https://api-gateway.perflo.ai/v1#",
     "https://api-gateway.perflo.ai?region=test",
     "https://api-gateway.perflo.ai#fragment",
   ])("rejects invalid origins before fetching: %s", (baseUrl) => {
@@ -136,6 +187,25 @@ describe("createPerfloClient", () => {
     );
 
     const result = await getIdentity({ client });
+
+    expect(result.error).toBeInstanceOf(TypeError);
+    expect(mocked.implementation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["protected to public", getIdentity, "/v1/public-config"],
+    ["public to protected", publicConfig, "/v1/identity"],
+  ])("blocks %s rewrites from later request interceptors", async (_description, operation, rewrittenPath) => {
+    const mocked = mockFetch();
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "pfa_agent_token",
+    });
+    client.interceptors.request.use(
+      (request) => new Request(`${PERFLO_API_ORIGIN}${rewrittenPath}`, request),
+    );
+
+    const result = await operation({ client });
 
     expect(result.error).toBeInstanceOf(TypeError);
     expect(mocked.implementation).not.toHaveBeenCalled();
@@ -221,6 +291,688 @@ describe("createPerfloClient", () => {
 
     expect(result.error).toBeInstanceOf(TypeError);
     expect(mocked.implementation).not.toHaveBeenCalled();
+  });
+});
+
+describe("agent token refresh", () => {
+  it("refreshes a 401 and retries the exact purchase request once", async () => {
+    const purchaseBodies: Array<Array<number>> = [];
+    let purchaseAttempt = 0;
+    const mocked = mockFetch(async (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/v1/agent-tokens/refresh") {
+        return jsonResponse(agentRefreshResponse("pfa_expired_token"));
+      }
+      purchaseAttempt += 1;
+      purchaseBodies.push(
+        Array.from(new Uint8Array(await request.arrayBuffer())),
+      );
+      return purchaseAttempt === 1
+        ? jsonResponse(problemDetails(), 401)
+        : jsonResponse({ id: "operation_id" }, 202);
+    });
+    const body = {
+      max_price: { amount: "12.34", currency: "USD" },
+      target: { kind: "query" as const, query: "find a flight" },
+    };
+
+    const result = await createPurchase({
+      body,
+      client: createPerfloClient({
+        fetch: mocked.fetch,
+        token: "pfa_expired_token",
+      }),
+      headers: {
+        "Idempotency-Key": "purchase_idempotency_key",
+        "Idempotency-Replay-Not-After": "2026-08-13T12:34:56Z",
+      },
+    });
+
+    expect(result.data).toEqual({ id: "operation_id" });
+    expect(
+      mocked.requests.map((request) => new URL(request.url).pathname),
+    ).toEqual(["/v1/purchases", "/v1/agent-tokens/refresh", "/v1/purchases"]);
+    expect(mocked.requests[0]?.method).toBe(mocked.requests[2]?.method);
+    expect(mocked.requests[0]?.url).toBe(mocked.requests[2]?.url);
+    expect(purchaseBodies[0]).toEqual(purchaseBodies[1]);
+    expect(mocked.requests[0]?.headers.get("Idempotency-Key")).toBe(
+      mocked.requests[2]?.headers.get("Idempotency-Key"),
+    );
+    expect(
+      mocked.requests[0]?.headers.get("Idempotency-Replay-Not-After"),
+    ).toBe(mocked.requests[2]?.headers.get("Idempotency-Replay-Not-After"));
+    expect(
+      mocked.requests.map((request) => request.headers.get("Authorization")),
+    ).toEqual([
+      "Bearer pfa_expired_token",
+      "Bearer pfa_expired_token",
+      "Bearer pfa_expired_token",
+    ]);
+  });
+
+  it("returns the original 401 when the retry also returns 401", async () => {
+    const originalResponse = jsonResponse(
+      problemDetails({ code: "original_unauthorized" }),
+      401,
+      { "X-Attempt": "original" },
+    );
+    const mocked = mockFetch((_request, call) => {
+      if (call === 1) {
+        return originalResponse;
+      }
+      if (call === 2) {
+        return jsonResponse(agentRefreshResponse("pfa_expired_token"));
+      }
+      return jsonResponse(problemDetails({ code: "retry_unauthorized" }), 401, {
+        "X-Attempt": "retry",
+      });
+    });
+
+    const result = await getIdentity({
+      client: createPerfloClient({
+        fetch: mocked.fetch,
+        token: "pfa_expired_token",
+      }),
+    });
+
+    expect(result.error).toMatchObject({ code: "original_unauthorized" });
+    expect(result.response).toBe(originalResponse);
+    expect(result.response?.headers.get("X-Attempt")).toBe("original");
+    expect(mocked.implementation).toHaveBeenCalledTimes(3);
+    expect(
+      mocked.requests.filter(
+        (request) =>
+          new URL(request.url).pathname === "/v1/agent-tokens/refresh",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("returns a lost retry response as transport uncertainty", async () => {
+    const originalResponse = jsonResponse(problemDetails(), 401);
+    const retryError = new TypeError("retry response lost");
+    let retryBodyDispatched = false;
+    const mocked = mockFetch(async (request, call) => {
+      if (call === 1) {
+        return originalResponse;
+      }
+      if (call === 2) {
+        return jsonResponse(agentRefreshResponse("pfa_expired_token"));
+      }
+      retryBodyDispatched = (await request.arrayBuffer()).byteLength > 0;
+      throw retryError;
+    });
+
+    const result = await createPurchase({
+      body: {
+        max_price: { amount: "12.34", currency: "USD" },
+        target: { kind: "query", query: "find a flight" },
+      },
+      client: createPerfloClient({
+        fetch: mocked.fetch,
+        token: "pfa_expired_token",
+      }),
+      headers: { "Idempotency-Key": "purchase_idempotency_key" },
+    });
+
+    expect(retryBodyDispatched).toBe(true);
+    expect(result.error).toBe(retryError);
+    expect(result.response).toBeUndefined();
+    expect(result.response).not.toBe(originalResponse);
+    expect(isDefinitiveNoOperation(result.error)).toBe(false);
+    expect(mocked.implementation).toHaveBeenCalledTimes(3);
+  });
+
+  it("never recurses when the refresh operation returns 401", async () => {
+    const mocked = mockFetch(() => jsonResponse(problemDetails(), 401));
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "pfa_expired_token",
+    });
+
+    const result = await client.refreshAgentToken();
+
+    expect(result.error).toMatchObject({ code: "authentication_required" });
+    expect(result.response?.status).toBe(401);
+    expect(mocked.implementation).toHaveBeenCalledTimes(1);
+    expect(new URL(mocked.requests[0]?.url ?? "").pathname).toBe(
+      "/v1/agent-tokens/refresh",
+    );
+  });
+
+  it("does not refresh a public operation that returns 401", async () => {
+    const mocked = mockFetch(() => jsonResponse(problemDetails(), 401));
+
+    const result = await publicConfig({
+      client: createPerfloClient({
+        fetch: mocked.fetch,
+        token: "pfa_expired_token",
+      }),
+      security: [{ scheme: "bearer", type: "http" }],
+    });
+
+    expect(result.response?.status).toBe(401);
+    expect(mocked.implementation).toHaveBeenCalledTimes(1);
+    expect(mocked.requests[0]?.headers.has("Authorization")).toBe(false);
+  });
+
+  it("strips authorization added to a public request by an interceptor", async () => {
+    const mocked = mockFetch();
+    let interceptedAuthorization: string | null | undefined;
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "pfa_agent_token",
+    });
+    client.interceptors.request.use((request) => {
+      request.headers.set("Authorization", "Bearer pfa_injected_token");
+      return request;
+    });
+    client.interceptors.response.use((response, request) => {
+      interceptedAuthorization = request.headers.get("Authorization");
+      return response;
+    });
+
+    const result = await publicConfig({ client });
+
+    expect(mocked.requests[0]?.headers.has("Authorization")).toBe(false);
+    expect(interceptedAuthorization).toBeNull();
+    expect(result.request?.headers.has("Authorization")).toBe(false);
+  });
+
+  it("does not let operation options downgrade protected authentication", async () => {
+    const mocked = mockFetch(() => jsonResponse({ actor_type: "agent" }));
+
+    const result = await getIdentity({
+      client: createPerfloClient({
+        fetch: mocked.fetch,
+        token: "pfa_agent_token",
+      }),
+      security: [],
+    });
+
+    expect(result.data).toEqual({ actor_type: "agent" });
+    expect(mocked.requests[0]?.headers.get("Authorization")).toBe(
+      "Bearer pfa_agent_token",
+    );
+  });
+
+  it("does not refresh or pin a static token replaced by an interceptor", async () => {
+    const originalResponse = jsonResponse(problemDetails(), 401);
+    const mocked = mockFetch((request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/v1/agent-tokens/refresh") {
+        return jsonResponse(agentRefreshResponse("pfa_substituted_token"));
+      }
+      return request.headers.get("Authorization") ===
+        "Bearer pfa_substituted_token"
+        ? originalResponse
+        : jsonResponse({ actor_type: "agent" });
+    });
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "pfa_configured_token",
+    });
+    const interceptor = client.interceptors.request.use((request) => {
+      request.headers.set("Authorization", "Bearer pfa_substituted_token");
+      return request;
+    });
+
+    const first = await getIdentity({ client });
+    client.interceptors.request.eject(interceptor);
+    const second = await getIdentity({ client });
+
+    expect(first.response).toBe(originalResponse);
+    expect(second.data).toEqual({ actor_type: "agent" });
+    expect(
+      mocked.requests.map((request) => request.headers.get("Authorization")),
+    ).toEqual(["Bearer pfa_substituted_token", "Bearer pfa_configured_token"]);
+    expect(
+      mocked.requests.some(
+        (request) =>
+          new URL(request.url).pathname === "/v1/agent-tokens/refresh",
+      ),
+    ).toBe(false);
+  });
+
+  it("leaves customer-token refresh to the generated public operation", async () => {
+    let customerAccessToken = "customer_expired_access_token";
+    const resolveToken = vi.fn(() => customerAccessToken);
+    const mocked = mockFetch((request, call) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/cli/token/refresh") {
+        return jsonResponse({
+          data: {
+            accessJwt: "customer_refreshed_access_token",
+            expiresAt: 1_800_000_000_000,
+            refreshToken: "customer_rotated_refresh_token",
+          },
+          success: true,
+        });
+      }
+      return call === 1
+        ? jsonResponse(problemDetails(), 401)
+        : jsonResponse({ actor_type: "customer" });
+    });
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: resolveToken,
+    });
+
+    const expired = await getIdentity({ client });
+    const refreshed = await refreshToken({
+      body: { refreshToken: "customer_refresh_token" },
+      client,
+    });
+    customerAccessToken =
+      refreshed.data?.data?.accessJwt ?? customerAccessToken;
+    const identity = await getIdentity({ client });
+
+    expect(expired.response?.status).toBe(401);
+    expect(identity.data).toEqual({ actor_type: "customer" });
+    expect(
+      mocked.requests.map((request) => new URL(request.url).pathname),
+    ).toEqual(["/v1/identity", "/cli/token/refresh", "/v1/identity"]);
+    expect(
+      mocked.requests.map((request) => request.headers.get("Authorization")),
+    ).toEqual([
+      "Bearer customer_expired_access_token",
+      null,
+      "Bearer customer_refreshed_access_token",
+    ]);
+    expect(resolveToken).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-resolves callback tokens after refresh without pinning the response", async () => {
+    let storedToken = "pfa_expired_token";
+    const resolveToken = vi.fn(() => storedToken);
+    const mocked = mockFetch((request, call) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/v1/agent-tokens/refresh") {
+        storedToken = "pfa_credential_store_token";
+        return jsonResponse(agentRefreshResponse("pfa_expired_token"));
+      }
+      return call === 1
+        ? jsonResponse(problemDetails(), 401)
+        : jsonResponse({ actor_type: "agent" });
+    });
+
+    const result = await getIdentity({
+      client: createPerfloClient({
+        fetch: mocked.fetch,
+        token: resolveToken,
+      }),
+    });
+
+    expect(result.data).toEqual({ actor_type: "agent" });
+    expect(resolveToken).toHaveBeenCalledTimes(2);
+    expect(
+      mocked.requests.map((request) => request.headers.get("Authorization")),
+    ).toEqual([
+      "Bearer pfa_expired_token",
+      "Bearer pfa_expired_token",
+      "Bearer pfa_credential_store_token",
+    ]);
+  });
+
+  it("allows concurrent expired-token requests to refresh independently", async () => {
+    let protectedAttempts = 0;
+    let refreshes = 0;
+    const mocked = mockFetch((request) => {
+      if (new URL(request.url).pathname === "/v1/agent-tokens/refresh") {
+        refreshes += 1;
+        return jsonResponse(agentRefreshResponse("pfa_expired_token"));
+      }
+      protectedAttempts += 1;
+      return protectedAttempts <= 2
+        ? jsonResponse(problemDetails(), 401)
+        : jsonResponse({ actor_type: "agent" });
+    });
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "pfa_expired_token",
+    });
+
+    const results = await Promise.all([
+      getIdentity({ client }),
+      getIdentity({ client }),
+    ]);
+
+    expect(results.map((result) => result.data)).toEqual([
+      { actor_type: "agent" },
+      { actor_type: "agent" },
+    ]);
+    expect(refreshes).toBe(2);
+    expect(protectedAttempts).toBe(4);
+  });
+
+  it.each([
+    ["missing access_token", {}],
+    ["non-string access_token", { access_token: 123 }],
+    ["empty access_token", { access_token: "" }],
+    ["partial response", { access_token: "pfa_original_token" }],
+    ["wrong token class", agentRefreshResponse("customer_access_token")],
+    ["changed token", agentRefreshResponse("pfa_changed_token")],
+    ["whitespace-padded token", agentRefreshResponse(" pfa_original_token ")],
+  ])("keeps token state after a malformed refresh response: %s", async (_name, refreshBody) => {
+    const originalResponse = jsonResponse(problemDetails(), 401);
+    const mocked = mockFetch((_request, call) => {
+      if (call === 1) {
+        return originalResponse;
+      }
+      return call === 2
+        ? jsonResponse(refreshBody)
+        : jsonResponse({ actor_type: "agent" });
+    });
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "pfa_original_token",
+    });
+
+    const failed = await getIdentity({ client });
+    const nextRequest = await getIdentity({ client });
+
+    expect(failed.response).toBe(originalResponse);
+    expect(nextRequest.data).toEqual({ actor_type: "agent" });
+    expect(mocked.implementation).toHaveBeenCalledTimes(3);
+    expect(
+      mocked.requests.map((request) => request.headers.get("Authorization")),
+    ).toEqual([
+      "Bearer pfa_original_token",
+      "Bearer pfa_original_token",
+      "Bearer pfa_original_token",
+    ]);
+  });
+
+  it("can disable automatic refresh", async () => {
+    const mocked = mockFetch(() => jsonResponse(problemDetails(), 401));
+
+    const result = await getIdentity({
+      client: createPerfloClient({
+        autoRefreshToken: false,
+        fetch: mocked.fetch,
+        token: "pfa_expired_token",
+      }),
+    });
+
+    expect(result.response?.status).toBe(401);
+    expect(mocked.implementation).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "network failure",
+    "non-2xx response",
+  ])("returns the original 401 after refresh %s", async (failure) => {
+    const originalResponse = jsonResponse(problemDetails(), 401);
+    const mocked = mockFetch((_request, call) => {
+      if (call === 1) {
+        return originalResponse;
+      }
+      if (failure === "network failure") {
+        throw new TypeError("refresh connection lost");
+      }
+      return jsonResponse(problemDetails({ status: 503 }), 503);
+    });
+
+    const result = await getIdentity({
+      client: createPerfloClient({
+        fetch: mocked.fetch,
+        token: "pfa_expired_token",
+      }),
+    });
+
+    expect(result.response).toBe(originalResponse);
+    expect(mocked.implementation).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps static state after an invalid generated refresh response", async () => {
+    const mocked = mockFetch((request) =>
+      new URL(request.url).pathname === "/v1/agent-tokens/refresh"
+        ? jsonResponse(agentRefreshResponse("pfa_changed_token"))
+        : jsonResponse({ actor_type: "agent" }),
+    );
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "pfa_original_token",
+    });
+
+    await refreshAgentToken({ client });
+    await getIdentity({ client });
+
+    expect(mocked.requests[1]?.headers.get("Authorization")).toBe(
+      "Bearer pfa_original_token",
+    );
+  });
+
+  it("does not pin a static token substituted during explicit refresh", async () => {
+    const mocked = mockFetch((request) =>
+      new URL(request.url).pathname === "/v1/agent-tokens/refresh"
+        ? jsonResponse(agentRefreshResponse("pfa_substituted_token"))
+        : jsonResponse({ actor_type: "agent" }),
+    );
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      token: "pfa_configured_token",
+    });
+    const interceptor = client.interceptors.request.use((request) => {
+      request.headers.set("Authorization", "Bearer pfa_substituted_token");
+      return request;
+    });
+
+    await client.refreshAgentToken();
+    client.interceptors.request.eject(interceptor);
+    await getIdentity({ client });
+
+    expect(
+      mocked.requests.map((request) => request.headers.get("Authorization")),
+    ).toEqual(["Bearer pfa_substituted_token", "Bearer pfa_configured_token"]);
+  });
+});
+
+describe("purchase quote idempotency", () => {
+  it("attaches factory keys only to quotes and preserves caller keys", async () => {
+    const idempotencyKeyFactory = vi.fn(() => "factory_quote_key");
+    const mocked = mockFetch();
+    const interceptedKeys: Array<string | null> = [];
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      idempotencyKeyFactory,
+      token: "pfa_agent_token",
+    });
+    client.interceptors.response.use((response, request) => {
+      interceptedKeys.push(request.headers.get("Idempotency-Key"));
+      return response;
+    });
+    const quoteBody = {
+      target: { kind: "service" as const, service_id: "service_id" },
+    };
+
+    const generatedQuote = await createPurchaseQuote({
+      body: quoteBody,
+      client,
+    });
+    await createPurchaseQuote({
+      body: quoteBody,
+      client,
+      headers: { "idempotency-key": "caller_quote_key" },
+    });
+    await createPurchase({
+      body: {
+        max_price: { amount: "12.34", currency: "USD" },
+        target: { kind: "query", query: "find a flight" },
+      },
+      client,
+      headers: {} as never,
+    });
+
+    expect(idempotencyKeyFactory).toHaveBeenCalledTimes(1);
+    expect(mocked.requests[0]?.headers.get("Idempotency-Key")).toBe(
+      "factory_quote_key",
+    );
+    expect(mocked.requests[1]?.headers.get("Idempotency-Key")).toBe(
+      "caller_quote_key",
+    );
+    expect(mocked.requests[2]?.headers.has("Idempotency-Key")).toBe(false);
+    expect(generatedQuote.request?.headers.get("Idempotency-Key")).toBe(
+      "factory_quote_key",
+    );
+    expect(interceptedKeys).toEqual([
+      "factory_quote_key",
+      "caller_quote_key",
+      null,
+    ]);
+  });
+
+  it("reuses one factory key when a quote refreshes and retries", async () => {
+    const idempotencyKeyFactory = vi.fn(() => "factory_quote_key");
+    let quoteAttempt = 0;
+    const mocked = mockFetch((request) => {
+      if (new URL(request.url).pathname === "/v1/agent-tokens/refresh") {
+        return jsonResponse(agentRefreshResponse("pfa_expired_token"));
+      }
+      quoteAttempt += 1;
+      return quoteAttempt === 1
+        ? jsonResponse(problemDetails(), 401)
+        : jsonResponse({ id: "quote_id" }, 201);
+    });
+
+    const result = await createPurchaseQuote({
+      body: {
+        target: { kind: "service", service_id: "service_id" },
+      },
+      client: createPerfloClient({
+        fetch: mocked.fetch,
+        idempotencyKeyFactory,
+        token: "pfa_expired_token",
+      }),
+    });
+
+    expect(result.data).toEqual({ id: "quote_id" });
+    expect(idempotencyKeyFactory).toHaveBeenCalledTimes(1);
+    expect(mocked.requests[0]?.headers.get("Idempotency-Key")).toBe(
+      mocked.requests[2]?.headers.get("Idempotency-Key"),
+    );
+  });
+
+  it("does not attach a factory key after an interceptor rewrites a quote", async () => {
+    const idempotencyKeyFactory = vi.fn(() => "factory_quote_key");
+    const mocked = mockFetch();
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      idempotencyKeyFactory,
+      token: "pfa_agent_token",
+    });
+    client.interceptors.request.use(
+      (request) => new Request(`${PERFLO_API_ORIGIN}/v1/purchases`, request),
+    );
+
+    await createPurchaseQuote({
+      body: {
+        target: { kind: "service", service_id: "service_id" },
+      },
+      client,
+    });
+
+    expect(idempotencyKeyFactory).not.toHaveBeenCalled();
+    expect(mocked.requests[0]?.headers.has("Idempotency-Key")).toBe(false);
+  });
+});
+
+describe("submission uncertainty helpers", () => {
+  it.each([
+    [
+      "422 validation problem",
+      problemDetails({
+        code: "validation_error",
+        status: 422,
+        type: "about:blank",
+      }),
+      true,
+    ],
+    [
+      "409 idempotency conflict",
+      problemDetails({ code: "idempotency_key_conflict", status: 409 }),
+      false,
+    ],
+    [
+      "504 uncertain submission",
+      problemDetails({
+        code: "purchase_settlement_uncertain",
+        status: 504,
+        submission_uncertain: true,
+      }),
+      false,
+    ],
+    ["400 without a problem document", { status: 400 }, false],
+    ["408 problem", problemDetails({ status: 408 }), false],
+    [
+      "problem without a code",
+      { ...problemDetails({ status: 422 }), code: undefined },
+      false,
+    ],
+    [
+      "problem without submission uncertainty",
+      {
+        ...problemDetails({ status: 422 }),
+        submission_uncertain: undefined,
+      },
+      false,
+    ],
+  ])("classifies %s", (_name, error, expected) => {
+    expect(isDefinitiveNoOperation(error)).toBe(expected);
+  });
+
+  it("accepts the platform's wrapped problem shape", () => {
+    expect(
+      isDefinitiveNoOperation({
+        problem: problemDetails({
+          code: "validation_error",
+          status: 422,
+        }),
+        status: 422,
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects a wrapped problem whose statuses disagree", () => {
+    expect(
+      isDefinitiveNoOperation({
+        problem: problemDetails({
+          code: "purchase_settlement_uncertain",
+          status: 504,
+          submission_uncertain: true,
+        }),
+        status: 422,
+      }),
+    ).toBe(false);
+  });
+
+  it("resolves conflicting uncertainty extensions toward uncertainty", () => {
+    const error = {
+      problem: problemDetails({
+        code: "validation_error",
+        status: 422,
+        submission_uncertain: false,
+      }),
+      status: 422,
+      submission_uncertain: true,
+    };
+
+    expect(isSubmissionUncertain(error)).toBe(true);
+    expect(isDefinitiveNoOperation(error)).toBe(false);
+  });
+
+  it("recognizes only explicit submission uncertainty", () => {
+    expect(
+      isSubmissionUncertain(problemDetails({ submission_uncertain: true })),
+    ).toBe(true);
+    expect(
+      isSubmissionUncertain({
+        problem: problemDetails({ submission_uncertain: true }),
+      }),
+    ).toBe(true);
+    expect(
+      isSubmissionUncertain(problemDetails({ submission_uncertain: false })),
+    ).toBe(false);
+    expect(isSubmissionUncertain(null)).toBe(false);
   });
 });
 
