@@ -64,8 +64,6 @@ Call `client.refreshAgentToken()` to refresh explicitly. The generated `refreshA
 
 If `token` is a callback that resolves to a `pfa_` token, the SDK resolves it for the original request and again for the retry. It validates the refresh response but does not replace or pin the callback's value. The credential-store owner remains authoritative. Concurrent `401` responses can each refresh because the gateway re-stamp is idempotent and returns the same token value.
 
-`baseUrl` accepts an HTTP or HTTPS origin or its exact `/v1` API root. The client canonicalizes `/v1` before combining it with generated operation paths.
-
 ## Protect financial mutations
 
 Persist the exact body, confirmation intent ID, and idempotency key before a financial write. The SDK never creates keys for purchases, transfers, or other financial mutations. Callers own those keys, especially after a `submission_uncertain` result.

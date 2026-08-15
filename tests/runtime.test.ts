@@ -209,7 +209,7 @@ describe("createPerfloClient", () => {
     });
     await getIdentity({
       client: createPerfloClient({
-        baseUrl: "https://api-gateway.lordofthechains.com/v1",
+        baseUrl: "https://api-gateway.perflo.ai/v1",
         fetch: custom.fetch,
         token: "pfa_agent_pairing_token",
       }),
@@ -228,7 +228,7 @@ describe("createPerfloClient", () => {
       "http://127.0.0.1:8000/v1/public-config",
     );
     expect(custom.requests[0]?.url).toBe(
-      "https://api-gateway.lordofthechains.com/v1/identity",
+      "https://api-gateway.perflo.ai/v1/identity",
     );
   });
 

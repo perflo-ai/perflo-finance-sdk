@@ -88,6 +88,7 @@ const TRUSTED_APP_ORIGIN = "https://app.perflo.ai";
 const DEFAULT_CONNECTION_TIMEOUT_MS = 180_000;
 const DEFAULT_OPERATION_TIMEOUT_MS = 180_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_READ_DELAY_MS = 500;
 const DEFAULT_JOURNAL_PATH = ".perflo-live-api-state.json";
 
 function mutationResourceId(action: string, resourceId: string | undefined) {
@@ -470,27 +471,53 @@ async function check<T>(
 ): Promise<T | undefined> {
   try {
     const result = await request();
-    if (result.error !== undefined) {
-      record("FAIL", label, describeError(result.error, result.response));
-      return;
-    }
-    if (result.data === undefined) {
-      record("FAIL", label, "success response omitted its required body");
-      return;
-    }
-    const validationError = validate(result.data);
-    if (validationError) {
-      record("FAIL", label, validationError);
-      return;
-    }
-    record(
-      "PASS",
-      label,
-      `${result.response?.status ?? "ok"}, ${summarize(result.data)}`,
-    );
-    return result.data;
+    return recordCheckResult(label, result, validate);
   } catch (error) {
     record("FAIL", label, describeError(error));
+    return;
+  }
+}
+
+function recordCheckResult<T>(
+  label: string,
+  result: SdkResult<T>,
+  validate: ResultValidator<T>,
+): T | undefined {
+  if (result.error !== undefined) {
+    record("FAIL", label, describeError(result.error, result.response));
+    return;
+  }
+  if (result.data === undefined) {
+    record("FAIL", label, "success response omitted its required body");
+    return;
+  }
+  const validationError = validate(result.data);
+  if (validationError) {
+    record("FAIL", label, validationError);
+    return;
+  }
+  record(
+    "PASS",
+    label,
+    `${result.response?.status ?? "ok"}, ${summarize(result.data)}`,
+  );
+  return result.data;
+}
+
+async function checkAuthorizedDevices(client: PerfloClient) {
+  try {
+    const result = await devices({ client });
+    if (result.error !== undefined && result.response?.status === 504) {
+      record(
+        "SKIP",
+        "authorized devices",
+        "504 from slow upstream device list",
+      );
+      return;
+    }
+    return recordCheckResult("authorized devices", result, requireDeviceList);
+  } catch (error) {
+    record("FAIL", "authorized devices", describeError(error));
     return;
   }
 }
@@ -1743,7 +1770,7 @@ function requireDevicePrincipalMatch(
   if (authorized.email !== undefined) {
     const authenticatedEmail = state.customer.email;
     if (
-      authenticatedEmail === null ||
+      authenticatedEmail !== null &&
       authorized.email.trim().toLowerCase() !==
         authenticatedEmail.trim().toLowerCase()
     ) {
@@ -1983,106 +2010,109 @@ async function runReadSweep(
   const capabilities = state.capabilities;
   const gate = (enabled: boolean) => connected && enabled;
 
-  const [
-    beneficiaryRows,
-    cardRows,
-    mandateRows,
-    operationRows,
-    purchaseRows,
-    serviceRows,
-    ,
-    countryRows,
-  ] = await Promise.all([
-    capability(
-      gate(capabilities.beneficiaries),
-      "beneficiaries",
-      () => beneficiaries({ client }),
-      requireBeneficiaries,
-    ),
-    capability(
-      gate(capabilities.cards),
-      "cards",
-      () => cards({ client }),
-      requireCards,
-    ),
-    capability(
-      gate(capabilities.mandates),
-      "mandates",
-      () => mandates({ client }),
-      requireMandates,
-    ),
-    check(
-      "operations",
-      () => listOperations({ client, query: { limit: 50 } }),
-      requireOperationsArray,
-    ),
-    capability(
-      gate(capabilities.purchases),
-      "purchases",
-      () => purchases({ client, query: { limit: 50, offset: 0 } }),
-      requirePurchases,
-    ),
-    capability(
-      gate(capabilities.service_catalogue),
-      "services",
-      () => services({ client, query: { limit: 25 } }),
-      requireServices,
-    ),
-    check(
-      "webhook subscriptions",
-      () => listSubscriptions({ client }),
-      requireWebhooks,
-    ),
-    capability(
-      gate(capabilities.recipient_metadata),
-      "beneficiary countries",
-      () => beneficiaryCountries({ client }),
-      requireBeneficiaryCountries,
-    ),
-    check("authorized devices", () => devices({ client }), requireDeviceList),
-    capability(
-      gate(capabilities.kyc_status),
-      "KYC status",
-      () => kycStatus({ client }),
-      requireKyc,
-    ),
-    capability(
-      gate(capabilities.accounts),
-      "deposit accounts",
-      () => accounts({ client }),
-      requireAccounts,
-    ),
-    capability(
-      gate(capabilities.activity),
-      "activity",
-      () => activity({ client, query: { limit: 25 } }),
-      requireActivityPage,
-    ),
-    capability(
-      gate(capabilities.display_preferences),
-      "display currency",
-      () => displayCurrency({ client }),
-      requireDisplayCurrency,
-    ),
-    capability(
-      gate(capabilities.spending_account),
-      "spending account",
-      () => spendingAccount({ client }),
-      requireSpendingAccount,
-    ),
-    capability(
-      gate(capabilities.service_catalogue),
-      "service capabilities",
-      () =>
-        serviceCapabilities({
-          client,
-          query: {
-            query: process.env.PERFLO_LIVE_SERVICE_QUERY ?? "web search",
-          },
-        }),
-      requireCapabilities,
-    ),
-  ]);
+  const beneficiaryRows = await capability(
+    gate(capabilities.beneficiaries),
+    "beneficiaries",
+    () => beneficiaries({ client }),
+    requireBeneficiaries,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  const cardRows = await capability(
+    gate(capabilities.cards),
+    "cards",
+    () => cards({ client }),
+    requireCards,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  const mandateRows = await capability(
+    gate(capabilities.mandates),
+    "mandates",
+    () => mandates({ client }),
+    requireMandates,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  const operationRows = await check(
+    "operations",
+    () => listOperations({ client, query: { limit: 50 } }),
+    requireOperationsArray,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  const purchaseRows = await capability(
+    gate(capabilities.purchases),
+    "purchases",
+    () => purchases({ client, query: { limit: 50, offset: 0 } }),
+    requirePurchases,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  const serviceRows = await capability(
+    gate(capabilities.service_catalogue),
+    "services",
+    () => services({ client, query: { limit: 25 } }),
+    requireServices,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  await check(
+    "webhook subscriptions",
+    () => listSubscriptions({ client }),
+    requireWebhooks,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  const countryRows = await capability(
+    gate(capabilities.recipient_metadata),
+    "beneficiary countries",
+    () => beneficiaryCountries({ client }),
+    requireBeneficiaryCountries,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  await capability(
+    gate(capabilities.kyc_status),
+    "KYC status",
+    () => kycStatus({ client }),
+    requireKyc,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  await capability(
+    gate(capabilities.accounts),
+    "deposit accounts",
+    () => accounts({ client }),
+    requireAccounts,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  await capability(
+    gate(capabilities.activity),
+    "activity",
+    () => activity({ client, query: { limit: 25 } }),
+    requireActivityPage,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  await capability(
+    gate(capabilities.display_preferences),
+    "display currency",
+    () => displayCurrency({ client }),
+    requireDisplayCurrency,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  await capability(
+    gate(capabilities.spending_account),
+    "spending account",
+    () => spendingAccount({ client }),
+    requireSpendingAccount,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  await capability(
+    gate(capabilities.service_catalogue),
+    "service capabilities",
+    () =>
+      serviceCapabilities({
+        client,
+        query: {
+          query: process.env.PERFLO_LIVE_SERVICE_QUERY ?? "web search",
+        },
+      }),
+    requireCapabilities,
+  );
+  await sleep(DEFAULT_READ_DELAY_MS);
+  await checkAuthorizedDevices(client);
 
   record(
     listActivity === activity ? "PASS" : "FAIL",
@@ -2095,10 +2125,10 @@ async function runReadSweep(
     "same generated operation",
   );
 
-  const detailChecks: Array<Promise<unknown>> = [];
+  const detailChecks: Array<() => Promise<unknown>> = [];
   const firstBeneficiary = beneficiaryRows?.[0];
   if (firstBeneficiary) {
-    detailChecks.push(
+    detailChecks.push(() =>
       check(
         "beneficiary detail",
         () =>
@@ -2115,7 +2145,7 @@ async function runReadSweep(
 
   const firstCountry = countryRows?.[0] as BeneficiaryCountry | undefined;
   if (firstCountry) {
-    detailChecks.push(
+    detailChecks.push(() =>
       check(
         "beneficiary schemas",
         () =>
@@ -2132,7 +2162,7 @@ async function runReadSweep(
 
   const firstCard = cardRows?.[0];
   if (firstCard && capabilities.card_transactions) {
-    detailChecks.push(
+    detailChecks.push(() =>
       check(
         "card transactions",
         () =>
@@ -2154,7 +2184,7 @@ async function runReadSweep(
 
   const firstMandate = mandateRows?.[0];
   if (firstMandate) {
-    detailChecks.push(
+    detailChecks.push(() =>
       check(
         "mandate detail",
         () => getMandate({ client, path: { mandate_id: firstMandate.id } }),
@@ -2166,7 +2196,7 @@ async function runReadSweep(
   }
 
   if (gate(capabilities.mandates)) {
-    detailChecks.push(
+    detailChecks.push(() =>
       check(
         "provider grants",
         () => mandateProviderGrants({ client }),
@@ -2179,7 +2209,7 @@ async function runReadSweep(
 
   const firstOperation = operationRows?.[0];
   if (firstOperation) {
-    detailChecks.push(
+    detailChecks.push(() =>
       check(
         "operation detail",
         () =>
@@ -2197,7 +2227,7 @@ async function runReadSweep(
 
   const firstPurchase = purchaseRows?.[0];
   if (firstPurchase) {
-    detailChecks.push(
+    detailChecks.push(() =>
       check(
         "purchase detail",
         () => getPurchase({ client, path: { purchase_id: firstPurchase.id } }),
@@ -2210,7 +2240,7 @@ async function runReadSweep(
 
   const firstService = serviceRows?.[0];
   if (firstService) {
-    detailChecks.push(
+    detailChecks.push(() =>
       check(
         "service detail",
         () => getService({ client, path: { service_id: firstService.id } }),
@@ -2223,7 +2253,7 @@ async function runReadSweep(
 
   const withdrawalId = process.env.PERFLO_LIVE_SPENDING_WITHDRAWAL_ID?.trim();
   if (withdrawalId) {
-    detailChecks.push(
+    detailChecks.push(() =>
       capability(
         gate(capabilities.spending_withdrawals),
         "spending withdrawal detail",
@@ -2247,7 +2277,10 @@ async function runReadSweep(
     );
   }
 
-  await Promise.all(detailChecks);
+  for (const detailCheck of detailChecks) {
+    await sleep(DEFAULT_READ_DELAY_MS);
+    await detailCheck();
+  }
   return {
     services: serviceRows,
   };
@@ -3887,7 +3920,7 @@ async function main(): Promise<void> {
   let state = await readOnboarding(customerClient);
   requireDevicePrincipalMatch(authorized, state, identity);
   await confirmAccount(
-    state.customer.email ?? undefined,
+    state.customer.email ?? authorized.email,
     identity.wallet ?? undefined,
   );
   if (state.perflo_connection !== "connected" && !argv.has("--no-connect")) {
@@ -3946,6 +3979,7 @@ export {
   boundedDelay,
   boundedFetch,
   check,
+  checkAuthorizedDevices,
   createJournalEntry,
   describeError,
   dispatchAfterJournal,

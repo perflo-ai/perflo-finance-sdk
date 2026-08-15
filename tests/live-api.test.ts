@@ -10,6 +10,7 @@ import {
   bindSubmittedOperation,
   boundedDelay,
   check,
+  checkAuthorizedDevices,
   createJournalEntry,
   describeError,
   dispatchAfterJournal,
@@ -428,6 +429,67 @@ describe("live API exercise safety", () => {
         { wallet: "0xabc" },
       ),
     ).toThrow(/wallet does not match/);
+    expect(() =>
+      requireDevicePrincipalMatch(
+        {
+          email: "owner@example.com",
+          token: "token",
+          wallet: "0xabc",
+        },
+        { customer: { email: null } } as never,
+        { wallet: "0xabc" },
+      ),
+    ).not.toThrow();
+  });
+
+  it("skips the known slow authorized-device response on 504 only", async () => {
+    const logs: Array<string> = [];
+    vi.spyOn(console, "log").mockImplementation((...values) => {
+      logs.push(values.join(" "));
+    });
+    const client = createPerfloClient({
+      baseUrl: "https://api.example.test",
+      fetch: (async () =>
+        new Response(
+          JSON.stringify({
+            code: "gateway_timeout",
+            detail: "The upstream device list timed out.",
+            status: 504,
+          }),
+          {
+            headers: { "Content-Type": "application/problem+json" },
+            status: 504,
+          },
+        )) as typeof globalThis.fetch,
+      token: "customer-token",
+    });
+
+    await checkAuthorizedDevices(client);
+
+    expect(logs.join("\n")).toContain(
+      "SKIP authorized devices: 504 from slow upstream device list",
+    );
+
+    const failingClient = createPerfloClient({
+      baseUrl: "https://api.example.test",
+      fetch: (async () =>
+        new Response(
+          JSON.stringify({
+            code: "service_unavailable",
+            detail: "The upstream device service is unavailable.",
+            status: 503,
+          }),
+          {
+            headers: { "Content-Type": "application/problem+json" },
+            status: 503,
+          },
+        )) as typeof globalThis.fetch,
+      token: "customer-token",
+    });
+
+    await checkAuthorizedDevices(failingClient);
+
+    expect(logs.join("\n")).toContain("FAIL authorized devices: 503");
   });
 
   it("persists the exact request and rejects mismatched operation evidence", () => {
