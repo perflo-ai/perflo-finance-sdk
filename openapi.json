@@ -1233,7 +1233,7 @@
         "description": "The device authorization session to poll.",
         "properties": {
           "sid": {
-            "description": "The opaque session returned by device start.",
+            "description": "The opaque session returned by device start; it is the capability and must be treated as a short-lived bearer secret.",
             "title": "Sid",
             "type": "string"
           }
@@ -1641,7 +1641,7 @@
         "description": "The signing session to poll.",
         "properties": {
           "sid": {
-            "description": "The opaque session returned by sign start.",
+            "description": "The opaque session returned by sign start; it is the capability and must be treated as a short-lived bearer secret.",
             "title": "Sid",
             "type": "string"
           }
@@ -4511,7 +4511,7 @@
   "paths": {
     "/cli/device/poll": {
       "post": {
-        "description": "Relays a Perflo device poll with both per-address and per-sid rate limits.",
+        "description": "Relays a Perflo device poll with both per-address and per-sid rate limits. The session ID is the capability: treat it as a short-lived bearer secret.",
         "operationId": "poll_device",
         "requestBody": {
           "content": {
@@ -4737,7 +4737,7 @@
     },
     "/cli/sign/poll": {
       "post": {
-        "description": "Relays a Perflo sign poll with both per-address and per-sid rate limits.",
+        "description": "Relays a Perflo sign poll with both per-address and per-sid rate limits. The session ID is the capability: treat it as a short-lived bearer secret.",
         "operationId": "poll_sign",
         "requestBody": {
           "content": {
