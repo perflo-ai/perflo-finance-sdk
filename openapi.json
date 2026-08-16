@@ -2697,7 +2697,7 @@
             "title": "Perflo Account Hint"
           },
           "perflo_connection": {
-            "description": "The state of the customer's Perflo link: pending while a device link is in flight, connected once credentials are stored, reconnect_required when the stored credentials no longer work, operator_action_required when manual support must clear the block, and not_connected when no link exists.",
+            "description": "The state of the customer's Perflo link: pending while a device link is in flight, connected once credentials are stored, reconnect_required when the stored credentials no longer work, operator_action_required when manual support must clear the block, and not_connected when no device is linked, either because none ever was or because the customer disconnected.",
             "enum": [
               "pending",
               "connected",
@@ -3079,7 +3079,7 @@
             "description": "The hosted hand-off to open next. Null when the connection has nothing to open \u2014 settled, or its pending session is no longer readable."
           },
           "status": {
-            "description": "The state of the link: pending while a device link is in flight, connected once credentials are stored, reconnect_required when the stored credentials no longer work, operator_action_required when manual support must clear the block, and not_connected when no link exists.",
+            "description": "The state of the link: pending while a device link is in flight, connected once credentials are stored, reconnect_required when the stored credentials no longer work, operator_action_required when manual support must clear the block, and not_connected when no device is linked, either because none ever was or because the customer disconnected.",
             "enum": [
               "pending",
               "connected",
@@ -10734,7 +10734,7 @@
     },
     "/v1/perflo-connections/current": {
       "delete": {
-        "description": "Removes the customer's Perflo link and revokes the provider device on a best-effort basis. Admits a customer token with a fresh iat and answers 204 with no body. The removal is refused while a mandate or an operation still holds unsettled provider authority. After a lost or ambiguous response, the client must read GET /v1/onboarding before deciding whether to retry the delete, reconnect, or escalate an operator_action_required state.",
+        "description": "Removes the customer's Perflo link and revokes the provider device on a best-effort basis. Admits a customer token with a fresh iat and answers 204 with no body. The removal erases the stored credential but keeps the account authority: mandates, agent pairings, beneficiaries, cards, quotes, and webhook subscriptions survive and re-enable when the same account connects again. Revoke a mandate before disconnecting if the customer wants it stopped, because revoking a beneficiary-payment mandate needs the credential this erases. It is refused while an operation still holds unsettled provider authority. After a lost or ambiguous response, the client must read GET /v1/onboarding before deciding whether to retry the delete, reconnect, or escalate an operator_action_required state.",
         "operationId": "disconnect_perflo_connection",
         "responses": {
           "204": {
