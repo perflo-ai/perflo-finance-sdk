@@ -8,9 +8,11 @@ const typesPath = resolve(outputDirectory, "types.gen.ts");
 const errorTypes = [
   "DevicesErrors",
   "PollDeviceErrors",
+  "PollSignErrors",
   "RefreshTokenErrors",
   "RevokeTokenErrors",
   "StartDeviceErrors",
+  "StartSignErrors",
 ];
 
 let source = await readFile(typesPath, "utf8");
@@ -38,8 +40,8 @@ for (const typeName of errorTypes) {
   source = source.replace(original, patched);
 }
 
-if (replacementCount !== 15) {
-  throw new Error(`Expected 15 CLI error unions, found ${replacementCount}`);
+if (replacementCount !== 21) {
+  throw new Error(`Expected 21 CLI error unions, found ${replacementCount}`);
 }
 
 await writeFile(typesPath, source);

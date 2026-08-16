@@ -114,17 +114,17 @@ describe("SDK reference generator", () => {
       Mandates: 11,
       Onboarding: 4,
       Operations: 4,
-      "Perflo device tokens": 5,
+      "Perflo device tokens": 7,
       Services: 7,
       Spending: 3,
       Transfers: 2,
       Webhooks: 3,
     };
 
-    expect(rows).toHaveLength(59);
-    expect(new Set(functionNames).size).toBe(59);
+    expect(rows).toHaveLength(61);
+    expect(new Set(functionNames).size).toBe(61);
     expect(page.match(/^### /gmu)).toHaveLength(14);
-    expect(result.stdout).toContain("59 operations across 14 domains");
+    expect(result.stdout).toContain("61 operations across 14 domains");
     expect(
       page.startsWith(`<p>Before the generated region.</p>\n${startMarker}\n`),
     ).toBe(true);
@@ -190,12 +190,13 @@ describe("SDK reference generator", () => {
       row.includes("| Public |"),
     );
 
-    expect(publicRows).toHaveLength(5);
+    expect(publicRows).toHaveLength(6);
     expect(
       publicRows.map((row) => row.match(/^\| `([^`]+)`/u)?.[1]).sort(),
     ).toEqual(
       [
         "pollDevice",
+        "pollSign",
         "startDevice",
         "refreshToken",
         "redeemConnectCode",
@@ -204,7 +205,7 @@ describe("SDK reference generator", () => {
     );
     expect(
       operationRows(page).filter((row) => row.includes("| Bearer |")),
-    ).toHaveLength(54);
+    ).toHaveLength(55);
   });
 
   it("escapes MDX-sensitive OpenAPI text", async () => {

@@ -4,6 +4,8 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+- Added `startSign` and `pollSign` for the relayed Perflo CLI signing
+  endpoints
 - Added a production API exercise for customer device authorization, Perflo
   connection, capability-gated reads, quotes, webhooks, and opt-in journaled
   mutations

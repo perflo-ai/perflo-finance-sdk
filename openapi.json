@@ -1593,6 +1593,271 @@
         "title": "CliRefreshedTokens",
         "type": "object"
       },
+      "CliSignPollComplete": {
+        "additionalProperties": false,
+        "description": "A completed signing approval and its transaction result.",
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/CliSignResult",
+            "description": "The signed submission's transaction result."
+          },
+          "status": {
+            "const": "complete",
+            "description": "The completed signing state.",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "result"
+        ],
+        "title": "CliSignPollComplete",
+        "type": "object"
+      },
+      "CliSignPollPending": {
+        "additionalProperties": false,
+        "description": "A signing approval that has not completed.",
+        "properties": {
+          "status": {
+            "description": "The current non-complete signing state.",
+            "enum": [
+              "pending",
+              "denied",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "CliSignPollPending",
+        "type": "object"
+      },
+      "CliSignPollRequest": {
+        "additionalProperties": false,
+        "description": "The signing session to poll.",
+        "properties": {
+          "sid": {
+            "description": "The opaque session returned by sign start.",
+            "title": "Sid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sid"
+        ],
+        "title": "CliSignPollRequest",
+        "type": "object"
+      },
+      "CliSignPollResponse": {
+        "additionalProperties": false,
+        "description": "Perflo's sign-poll success envelope.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "complete": "#/components/schemas/CliSignPollComplete",
+                    "denied": "#/components/schemas/CliSignPollPending",
+                    "expired": "#/components/schemas/CliSignPollPending",
+                    "pending": "#/components/schemas/CliSignPollPending"
+                  },
+                  "propertyName": "status"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CliSignPollPending"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CliSignPollComplete"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The current signing result.",
+            "title": "Data"
+          },
+          "success": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether Perflo accepted the poll.",
+            "title": "Success"
+          }
+        },
+        "title": "CliSignPollResponse",
+        "type": "object"
+      },
+      "CliSignResult": {
+        "additionalProperties": false,
+        "description": "The transaction evidence for a completed signature.",
+        "properties": {
+          "status": {
+            "description": "The provider transaction status of the signed submission.",
+            "enum": [
+              "submitted",
+              "processing",
+              "executing",
+              "success",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "txHash": {
+            "description": "The transaction hash of the signed submission.",
+            "title": "Txhash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "txHash",
+          "status"
+        ],
+        "title": "CliSignResult",
+        "type": "object"
+      },
+      "CliSignStart": {
+        "additionalProperties": false,
+        "description": "The provider session and browser hand-off for a signing approval.",
+        "properties": {
+          "approveUrl": {
+            "description": "The Perflo URL where the customer approves the signature.",
+            "title": "Approveurl",
+            "type": "string"
+          },
+          "expiresIn": {
+            "description": "How many seconds the signing session remains usable.",
+            "title": "Expiresin",
+            "type": "number"
+          },
+          "pollInterval": {
+            "description": "The provider-recommended polling interval in milliseconds.",
+            "title": "Pollinterval",
+            "type": "number"
+          },
+          "sid": {
+            "description": "The opaque signing session identifier.",
+            "title": "Sid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sid",
+          "approveUrl",
+          "pollInterval",
+          "expiresIn"
+        ],
+        "title": "CliSignStart",
+        "type": "object"
+      },
+      "CliSignStartRequest": {
+        "additionalProperties": false,
+        "description": "The action Perflo signs after the customer approves it.",
+        "properties": {
+          "executeBody": {
+            "additionalProperties": true,
+            "description": "The provider execution body the signed payload authorizes.",
+            "title": "Executebody",
+            "type": "object"
+          },
+          "executePath": {
+            "description": "The provider path the signed payload authorizes execution of.",
+            "title": "Executepath",
+            "type": "string"
+          },
+          "payload": {
+            "description": "The action payload the customer approves.",
+            "title": "Payload"
+          },
+          "preview": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional preview material for the customer's approval screen.",
+            "title": "Preview"
+          },
+          "signMode": {
+            "description": "Whether the signature covers a personal message or typed data.",
+            "enum": [
+              "personal",
+              "typed"
+            ],
+            "title": "Signmode",
+            "type": "string"
+          },
+          "signatureFormat": {
+            "description": "The signature encoding the customer's approval returns.",
+            "enum": [
+              "hex",
+              "rsv"
+            ],
+            "title": "Signatureformat",
+            "type": "string"
+          },
+          "type": {
+            "description": "The action kind identifying what the signature executes.",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "signMode",
+          "signatureFormat",
+          "payload",
+          "executePath",
+          "executeBody"
+        ],
+        "title": "CliSignStartRequest",
+        "type": "object"
+      },
+      "CliSignStartResponse": {
+        "additionalProperties": false,
+        "description": "Perflo's sign-start success envelope.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CliSignStart"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The signing session when one was created."
+          },
+          "success": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether Perflo accepted the request.",
+            "title": "Success"
+          }
+        },
+        "title": "CliSignStartResponse",
+        "type": "object"
+      },
       "CliTokenRefreshRequest": {
         "additionalProperties": false,
         "description": "The opaque provider token to exchange for fresh credentials.",
@@ -4297,7 +4562,7 @@
                 }
               }
             },
-            "description": "Gateway address or device-session rate limit, or relayed provider rate limit. Gateway limits return ProblemDetails; provider limits retain their upstream JSON envelope."
+            "description": "Gateway address or session rate limit, or relayed provider rate limit. Gateway limits return ProblemDetails; provider limits retain their upstream JSON envelope."
           },
           "default": {
             "content": {
@@ -4465,6 +4730,165 @@
           }
         ],
         "summary": "List the customer's Perflo devices",
+        "tags": [
+          "Perflo device tokens"
+        ]
+      }
+    },
+    "/cli/sign/poll": {
+      "post": {
+        "description": "Relays a Perflo sign poll with both per-address and per-sid rate limits.",
+        "operationId": "poll_sign",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CliSignPollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliSignPollResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliErrorResponse"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gateway validation problem or relayed provider failure."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliErrorResponse"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gateway address or session rate limit, or relayed provider rate limit. Gateway limits return ProblemDetails; provider limits retain their upstream JSON envelope."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliErrorResponse"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A gateway-generated problem document or the provider's failure status, headers and body relayed unchanged."
+          }
+        },
+        "summary": "Poll a Perflo CLI signing approval",
+        "tags": [
+          "Perflo device tokens"
+        ]
+      }
+    },
+    "/cli/sign/start": {
+      "post": {
+        "description": "Relays the authenticated Perflo CLI sign-start request and response without modification. The gateway stores none of the signing payload.",
+        "operationId": "start_sign",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CliSignStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliSignStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliErrorResponse"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gateway authentication problem or relayed provider failure."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliErrorResponse"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gateway validation problem or relayed provider failure."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliErrorResponse"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A gateway-generated problem document or the provider's failure status, headers and body relayed unchanged."
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Start a Perflo CLI signing approval",
         "tags": [
           "Perflo device tokens"
         ]
@@ -13211,7 +13635,7 @@
       "name": "Onboarding"
     },
     {
-      "description": "Transparent proxies for the five public Perflo CLI device-token operations. The gateway stores none of the relayed token payloads.",
+      "description": "Transparent proxies for the seven Perflo CLI device-token and signing operations. The gateway stores none of the relayed token or signing payloads.",
       "name": "Perflo device tokens"
     },
     {
