@@ -298,7 +298,7 @@
                 "type": "null"
               }
             ],
-            "description": "A masked fragment of the account number; this API publishes no unmasked bank identifier. Null when the provider omits it.",
+            "description": "The account number, in full, for an account this customer owns. The field name is kept for compatibility; this API no longer truncates it on read since only the owning customer's token can reach this route. Null when the provider omits it.",
             "title": "Account Number Masked"
           },
           "bank_address": {
@@ -346,7 +346,7 @@
                 "type": "null"
               }
             ],
-            "description": "A masked fragment of the IBAN; this API publishes no unmasked bank identifier. Null when the provider omits it.",
+            "description": "The IBAN, in full, for an account this customer owns. The field name is kept for compatibility; this API no longer truncates it on read since only the owning customer's token can reach this route. Null when the provider omits it.",
             "title": "Iban Masked"
           }
         },
@@ -711,7 +711,7 @@
                 "type": "null"
               }
             ],
-            "description": "A masked fragment of the payout destination; this API publishes no unmasked destination. Null when the beneficiary carries none.",
+            "description": "The payout destination, in full. The field name is kept for compatibility; this API no longer truncates it on read since only the owning customer's token can reach this route. Null when the beneficiary carries none.",
             "title": "Destination Masked"
           },
           "id": {
@@ -2693,11 +2693,11 @@
                 "type": "null"
               }
             ],
-            "description": "A masked hint identifying the linked Perflo account; null when no account is linked.",
+            "description": "The identifier for the linked Perflo account, in full; null when no account is linked. The field name is kept for compatibility; this API no longer truncates it on read since only the linked customer's own token can reach this route.",
             "title": "Perflo Account Hint"
           },
           "perflo_connection": {
-            "description": "The state of the customer's Perflo link: pending while a device link is in flight, connected once credentials are stored, reconnect_required when the stored credentials no longer work, operator_action_required when manual support must clear the block, and not_connected when no device is linked, either because none ever was or because the customer disconnected.",
+            "description": "The state of the customer's Perflo link: pending while a device link is in flight, connected once credentials are stored, reconnect_required when the stored credentials no longer work, and not_connected when no device is linked, either because none ever was or because the customer disconnected. operator_action_required is retired: no current code writes it, and a row already carrying it self-heals to reconnect_required or not_connected the next time this is read.",
             "enum": [
               "pending",
               "connected",
@@ -3064,7 +3064,7 @@
                 "type": "null"
               }
             ],
-            "description": "A masked hint identifying the linked Perflo account; null when no account is linked.",
+            "description": "The identifier for the linked Perflo account, in full; null when no account is linked. The field name is kept for compatibility; this API no longer truncates it on read since only the linked customer's own token can reach this route.",
             "title": "Account Hint"
           },
           "action": {
@@ -3079,7 +3079,7 @@
             "description": "The hosted hand-off to open next. Null when the connection has nothing to open \u2014 settled, or its pending session is no longer readable."
           },
           "status": {
-            "description": "The state of the link: pending while a device link is in flight, connected once credentials are stored, reconnect_required when the stored credentials no longer work, operator_action_required when manual support must clear the block, and not_connected when no device is linked, either because none ever was or because the customer disconnected.",
+            "description": "The state of the link: pending while a device link is in flight, connected once credentials are stored, reconnect_required when the stored credentials no longer work, and not_connected when no device is linked, either because none ever was or because the customer disconnected. operator_action_required is retired: no current code writes it, and a row already carrying it self-heals to reconnect_required or not_connected the next time this is read.",
             "enum": [
               "pending",
               "connected",
@@ -3222,7 +3222,7 @@
                 "type": "null"
               }
             ],
-            "description": "A masked fragment of the payout destination this grant can pay; null when the provider states none. The full destination is never published.",
+            "description": "The payout destination this grant can pay, in full; null when the provider states none. The field name is kept for compatibility; this API no longer truncates it on read since only the owning customer's token can reach this route.",
             "title": "Destination Masked"
           },
           "expires_at": {
@@ -8643,7 +8643,7 @@
     },
     "/v1/mandates/provider-grants": {
       "get": {
-        "description": "Lists the automatic-payment authority that exists on the Perflo account and was never created through this API. Admits a customer token and answers synchronously. This API cannot revoke such authority, holds no reservation ledger against it and records no mandate for it; POST /v1/mandates/provider-grants/{grant_id}/payments spends one payment from a listed grant on the owner's explicit, separately confirmed instruction. The payout destination is published masked. An empty list means the account carries no such authority at the moment of the read; a provider read that fails answers a problem document rather than an empty list.",
+        "description": "Lists the automatic-payment authority that exists on the Perflo account and was never created through this API. Admits a customer token and answers synchronously. This API cannot revoke such authority, holds no reservation ledger against it and records no mandate for it; POST /v1/mandates/provider-grants/{grant_id}/payments spends one payment from a listed grant on the owner's explicit, separately confirmed instruction. The payout destination is published in full. An empty list means the account carries no such authority at the moment of the read; a provider read that fails answers a problem document rather than an empty list.",
         "operationId": "mandate_provider_grants",
         "responses": {
           "200": {
@@ -9812,7 +9812,7 @@
     },
     "/v1/onboarding": {
       "get": {
-        "description": "Returns the single who-am-I-and-what-can-I-do view: the local customer record, the Perflo link state, the masked account hint, and one capability boolean per provider surface. Admits a customer token, answers synchronously from local state, and reaches no provider. Verification status is deliberately absent from this view: GET /v1/kyc is its single source.",
+        "description": "Returns the single who-am-I-and-what-can-I-do view: the local customer record, the Perflo link state, the linked account hint in full, and one capability boolean per provider surface. Admits a customer token, answers synchronously from local state, and reaches no provider. Verification status is deliberately absent from this view: GET /v1/kyc is its single source.",
         "operationId": "onboarding",
         "responses": {
           "200": {
@@ -10734,7 +10734,7 @@
     },
     "/v1/perflo-connections/current": {
       "delete": {
-        "description": "Removes the customer's Perflo link and revokes the provider device on a best-effort basis. Admits a customer token with a fresh iat and answers 204 with no body. The removal erases the stored credential but keeps the account authority: mandates, agent pairings, beneficiaries, cards, quotes, and webhook subscriptions survive and re-enable when the same account connects again. Revoke a mandate before disconnecting if the customer wants it stopped, because revoking a beneficiary-payment mandate needs the credential this erases. It is refused while an operation still holds unsettled provider authority. After a lost or ambiguous response, the client must read GET /v1/onboarding before deciding whether to retry the delete, reconnect, or escalate an operator_action_required state.",
+        "description": "Removes the customer's Perflo link and revokes the provider device on a best-effort basis. Admits a customer token with a fresh iat and answers 204 with no body. The removal erases the stored credential but keeps the account authority: mandates, agent pairings, beneficiaries, cards, quotes, and webhook subscriptions survive and re-enable when the same account connects again. Revoke a mandate before disconnecting if the customer wants it stopped, because revoking a beneficiary-payment mandate needs the credential this erases. It is refused while an operation still holds unsettled provider authority. After a lost or ambiguous response, the client must read GET /v1/onboarding before deciding whether to retry the delete or reconnect. An uncertain provider revocation retries automatically in the background rather than blocking on it.",
         "operationId": "disconnect_perflo_connection",
         "responses": {
           "204": {
