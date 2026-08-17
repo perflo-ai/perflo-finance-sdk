@@ -4,6 +4,8 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+## 0.1.0-beta.10 - 2026-08-18
+
 - Renamed the response fields that publish a customer's own account number,
   IBAN, beneficiary or grant destination, and linked-account identifier in
   full: `BankDetails.account_number_masked` and `iban_masked`
@@ -17,6 +19,18 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 - Added a production API exercise for customer device authorization, Perflo
   connection, capability-gated reads, quotes, webhooks, and opt-in journaled
   mutations
+- Updated the generated documentation for the bank identifier, beneficiary
+  destination and linked-account fields, which state that they publish in full,
+  and for the Perflo connection states, which no longer describe a terminal
+  operator-action state
+- Documented that disconnecting a Perflo connection erases the stored
+  credential but keeps the account's authority, so mandates, agent pairings,
+  beneficiaries, cards, quotes and webhook subscriptions survive it; revoke a
+  beneficiary-payment mandate before disconnecting, because revoking one needs
+  the credential the disconnect erases
+- Documented that the device and signing session identifier returned by the
+  start operations is itself the capability for the matching poll operation and
+  must be handled as a short-lived bearer secret
 
 ## 0.1.0-beta.9 - 2026-08-14
 
