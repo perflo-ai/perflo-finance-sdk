@@ -4,6 +4,14 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+- Renamed the response fields that publish a customer's own account number,
+  IBAN, beneficiary or grant destination, and linked-account identifier in
+  full: `BankDetails.account_number_masked` and `iban_masked`
+  are now `account_number` and `iban`; `BeneficiaryView.destination_masked` and
+  `ProviderGrantView.destination_masked` are now `destination`;
+  `PerfloConnectionView.account_hint` and `OnboardingView.perflo_account_hint`
+  are now `account_identifier` and `perflo_account_identifier`. Values are
+  unchanged; the old names are gone (breaking type change)
 - Added `startSign` and `pollSign` for the relayed Perflo CLI signing
   endpoints
 - Added a production API exercise for customer device authorization, Perflo

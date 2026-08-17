@@ -771,7 +771,7 @@ function isBeneficiary(data: unknown): boolean {
     isRecord(data) &&
     isNullableString(data.country) &&
     isNullableString(data.currency) &&
-    isNullableString(data.destination_masked) &&
+    isNullableString(data.destination) &&
     (data.is_external === null || typeof data.is_external === "boolean") &&
     isNullableString(data.name) &&
     isNullableString(data.nickname) &&
@@ -866,7 +866,7 @@ function isProviderGrant(data: unknown): boolean {
   return (
     hasNonemptyStringFields(data, ["id", "expires_at", "status"]) &&
     isRecord(data) &&
-    isNullableString(data.destination_masked) &&
+    isNullableString(data.destination) &&
     isNumber(data.payment_count) &&
     isMoney(data.per_payment_max) &&
     isMoney(data.total_cap) &&
@@ -1147,8 +1147,8 @@ function requireOnboardingData(data: unknown): string | undefined {
   ) &&
     typeof data.kyc_session_available === "boolean" &&
     data.kyc_session_available === capabilities.kyc_session &&
-    (data.perflo_account_hint === undefined ||
-      isNullableString(data.perflo_account_hint)) &&
+    (data.perflo_account_identifier === undefined ||
+      isNullableString(data.perflo_account_identifier)) &&
     typeof customer.id === "string" &&
     customer.id.length > 0 &&
     typeof customer.created_at === "string" &&
@@ -1997,7 +1997,7 @@ async function ensurePerfloConnection(
   record(
     "PASS",
     "Perflo account connection",
-    connected.perflo_account_hint ?? "connected",
+    connected.perflo_account_identifier ?? "connected",
   );
   return connected;
 }

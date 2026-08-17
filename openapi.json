@@ -289,7 +289,7 @@
             "description": "The holder of an account the customer owns \u2014 never a payee, which is what BeneficiaryView means. Null when the provider omits it.",
             "title": "Account Holder Name"
           },
-          "account_number_masked": {
+          "account_number": {
             "anyOf": [
               {
                 "type": "string"
@@ -298,8 +298,8 @@
                 "type": "null"
               }
             ],
-            "description": "The account number, in full, for an account this customer owns. The field name is kept for compatibility; this API no longer truncates it on read since only the owning customer's token can reach this route. Null when the provider omits it.",
-            "title": "Account Number Masked"
+            "description": "The account number, in full, for an account this customer owns \u2014 readable only with that customer's own token. Null when the provider omits it.",
+            "title": "Account Number"
           },
           "bank_address": {
             "anyOf": [
@@ -337,7 +337,7 @@
             "description": "The bank's name; null when the provider omits it.",
             "title": "Bank Name"
           },
-          "iban_masked": {
+          "iban": {
             "anyOf": [
               {
                 "type": "string"
@@ -346,8 +346,8 @@
                 "type": "null"
               }
             ],
-            "description": "The IBAN, in full, for an account this customer owns. The field name is kept for compatibility; this API no longer truncates it on read since only the owning customer's token can reach this route. Null when the provider omits it.",
-            "title": "Iban Masked"
+            "description": "The IBAN, in full, for an account this customer owns \u2014 readable only with that customer's own token. Null when the provider omits it.",
+            "title": "Iban"
           }
         },
         "title": "BankDetails",
@@ -702,7 +702,7 @@
             "description": "The ISO 4217 alphabetic payout currency; null when the beneficiary carries none.",
             "title": "Currency"
           },
-          "destination_masked": {
+          "destination": {
             "anyOf": [
               {
                 "type": "string"
@@ -711,8 +711,8 @@
                 "type": "null"
               }
             ],
-            "description": "The payout destination, in full. The field name is kept for compatibility; this API no longer truncates it on read since only the owning customer's token can reach this route. Null when the beneficiary carries none.",
-            "title": "Destination Masked"
+            "description": "The payout destination, in full \u2014 readable only with the owning customer's own token. Null when the beneficiary carries none.",
+            "title": "Destination"
           },
           "id": {
             "description": "This API's identifier for the beneficiary.",
@@ -782,7 +782,7 @@
           "payout_schema_id",
           "status",
           "created_at",
-          "destination_masked",
+          "destination",
           "is_external"
         ],
         "title": "BeneficiaryView",
@@ -2684,7 +2684,7 @@
             "title": "Kyc Session Available",
             "type": "boolean"
           },
-          "perflo_account_hint": {
+          "perflo_account_identifier": {
             "anyOf": [
               {
                 "type": "string"
@@ -2693,8 +2693,8 @@
                 "type": "null"
               }
             ],
-            "description": "The identifier for the linked Perflo account, in full; null when no account is linked. The field name is kept for compatibility; this API no longer truncates it on read since only the linked customer's own token can reach this route.",
-            "title": "Perflo Account Hint"
+            "description": "The identifier for the linked Perflo account, in full \u2014 readable only with the linked customer's own token. Null when no account is linked.",
+            "title": "Perflo Account Identifier"
           },
           "perflo_connection": {
             "description": "The state of the customer's Perflo link: pending while a device link is in flight, connected once credentials are stored, reconnect_required when the stored credentials no longer work, and not_connected when no device is linked, either because none ever was or because the customer disconnected. operator_action_required is retired: no current code writes it, and a row already carrying it self-heals to reconnect_required or not_connected the next time this is read.",
@@ -3055,7 +3055,7 @@
         "additionalProperties": false,
         "description": "The link state for the customer's Perflo connection and the hand-off that\nadvances it.",
         "properties": {
-          "account_hint": {
+          "account_identifier": {
             "anyOf": [
               {
                 "type": "string"
@@ -3064,8 +3064,8 @@
                 "type": "null"
               }
             ],
-            "description": "The identifier for the linked Perflo account, in full; null when no account is linked. The field name is kept for compatibility; this API no longer truncates it on read since only the linked customer's own token can reach this route.",
-            "title": "Account Hint"
+            "description": "The identifier for the linked Perflo account, in full \u2014 readable only with the linked customer's own token. Null when no account is linked.",
+            "title": "Account Identifier"
           },
           "action": {
             "anyOf": [
@@ -3093,7 +3093,7 @@
         },
         "required": [
           "status",
-          "account_hint",
+          "account_identifier",
           "action"
         ],
         "title": "PerfloConnectionView",
@@ -3213,7 +3213,7 @@
         "additionalProperties": false,
         "description": "Automatic-payment authority that exists on the Perflo account and was\nnever created through this API.\n\nThis API does not own the record: it cannot revoke the grant, holds no\nreservation ledger against it, and keeps no mandate for it. It will spend one\npayment from it on the owner's explicit, separately confirmed instruction,\nverified against a live provider read immediately beforehand.",
         "properties": {
-          "destination_masked": {
+          "destination": {
             "anyOf": [
               {
                 "type": "string"
@@ -3222,8 +3222,8 @@
                 "type": "null"
               }
             ],
-            "description": "The payout destination this grant can pay, in full; null when the provider states none. The field name is kept for compatibility; this API no longer truncates it on read since only the owning customer's token can reach this route.",
-            "title": "Destination Masked"
+            "description": "The payout destination this grant can pay, in full \u2014 readable only with the owning customer's own token. Null when the provider states none.",
+            "title": "Destination"
           },
           "expires_at": {
             "description": "When the grant stops being usable.",
@@ -3271,7 +3271,7 @@
         },
         "required": [
           "id",
-          "destination_masked",
+          "destination",
           "status",
           "per_payment_max",
           "total_cap",
@@ -9812,7 +9812,7 @@
     },
     "/v1/onboarding": {
       "get": {
-        "description": "Returns the single who-am-I-and-what-can-I-do view: the local customer record, the Perflo link state, the linked account hint in full, and one capability boolean per provider surface. Admits a customer token, answers synchronously from local state, and reaches no provider. Verification status is deliberately absent from this view: GET /v1/kyc is its single source.",
+        "description": "Returns the single who-am-I-and-what-can-I-do view: the local customer record, the Perflo link state, the linked account identifier in full, and one capability boolean per provider surface. Admits a customer token, answers synchronously from local state, and reaches no provider. Verification status is deliberately absent from this view: GET /v1/kyc is its single source.",
         "operationId": "onboarding",
         "responses": {
           "200": {

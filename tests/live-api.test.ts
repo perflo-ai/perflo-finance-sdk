@@ -242,7 +242,7 @@ describe("live API exercise safety", () => {
           status: "active",
         },
         kyc_session_available: true,
-        perflo_account_hint: 42,
+        perflo_account_identifier: 42,
         perflo_connection: "connected",
       }),
     ).toMatch(/no usable onboarding/);
@@ -1289,7 +1289,7 @@ describe("live API exercise safety", () => {
       const path = new URL(request.url).pathname;
       const body =
         path === "/v1/perflo-connections"
-          ? { account_hint: null, action: null, status: "connected" }
+          ? { account_identifier: null, action: null, status: "connected" }
           : {
               capabilities,
               customer: {
