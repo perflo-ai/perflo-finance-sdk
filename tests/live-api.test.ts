@@ -122,6 +122,33 @@ function setEnvironment(name: string, value: string): void {
   process.env[name] = value;
 }
 
+function abortAwareSend(
+  observe?: (signal: AbortSignal) => void,
+): (dispatch: { signal: AbortSignal }) => Promise<{ error: unknown }> {
+  // The signal can arrive already aborted, and a listener attached to one never fires:
+  // runJournaledMutation starts the submission clock before the journal write, and that
+  // write costs two fsyncs, so a contended disk can spend the whole budget before the
+  // signal is built. Listening without this guard leaves the promise unsettled forever
+  // -- which is what made "bounds a financial dispatch" time out on CI while every
+  // sibling finished in milliseconds. Real fetch already rejects on a pre-aborted
+  // signal; only a hand-written double has to say so.
+  return async ({ signal }) => {
+    observe?.(signal);
+    if (signal.aborted) {
+      return { error: signal.reason };
+    }
+    return await new Promise((resolveResult) => {
+      signal.addEventListener(
+        "abort",
+        () => resolveResult({ error: signal.reason }),
+        {
+          once: true,
+        },
+      );
+    });
+  };
+}
+
 afterEach(() => {
   for (const [name, value] of changedEnvironment) {
     if (value === undefined) {
@@ -609,6 +636,7 @@ describe("live API exercise safety", () => {
     const journal: Journal = { context, entries: [], version: 2 };
     try {
       const startedAt = Date.now();
+      const send = vi.fn(abortAwareSend());
       await runJournaledMutation({
         action: "beneficiary.create",
         body: { name: "fixture" },
@@ -619,16 +647,63 @@ describe("live API exercise safety", () => {
         label: "beneficiary create",
         operationTimeoutMs: 30,
         path: mutationPath("beneficiary.create"),
-        send: async ({ signal }) =>
-          await new Promise((resolveResult) => {
-            signal.addEventListener(
-              "abort",
-              () => resolveResult({ error: signal.reason }),
-              { once: true },
-            );
-          }),
+        send,
       });
+      // Exactly once, on both branches. A journaled financial write that silently
+      // dispatched twice would satisfy every other assertion here.
+      expect(send).toHaveBeenCalledTimes(1);
       expect(Date.now() - startedAt).toBeLessThan(1000);
+      expect(journal.entries[0]).toMatchObject({
+        status: "unresolved",
+        submission_started_at: expect.any(String),
+      });
+      const persisted = JSON.parse(await readFile(journalPath, "utf8"));
+      expect(persisted.entries[0].status).toBe("unresolved");
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("leaves a dispatch unresolved when the budget is gone before submission", async () => {
+    // The "bounds a financial dispatch" sibling reaches this branch only when the
+    // journal's two fsyncs happen to outlast its 30 ms budget, which is a property of
+    // the disk rather than of the test -- it held on CI and never locally. A zero budget
+    // makes the same branch certain: the deadline has already passed by the time
+    // runJournaledMutation builds the signal, so send is handed one that is already
+    // aborted rather than one that aborts later. Zero is a test-only lever; the CLI
+    // validates PERFLO_LIVE_OPERATION_TIMEOUT_MS at 1 or above, and production reaches
+    // this same state through elapsed time on a legal budget.
+    const directory = await mkdtemp(
+      join(tmpdir(), "perflo-live-spent-budget-"),
+    );
+    const journalPath = join(directory, "journal.json");
+    const context: JournalContext = {
+      api_origin: "https://api-gateway.perflo.ai",
+      customer_id: "customer-1",
+      subject: "subject-1",
+    };
+    const journal: Journal = { context, entries: [], version: 2 };
+    try {
+      let signalWasAlreadyAborted: boolean | undefined;
+      const send = vi.fn(
+        abortAwareSend((signal) => {
+          signalWasAlreadyAborted = signal.aborted;
+        }),
+      );
+      await runJournaledMutation({
+        action: "beneficiary.create",
+        body: { name: "fixture" },
+        client: createPerfloClient({ token: "customer-token" }),
+        confirm: async () => undefined,
+        journal,
+        journalPath,
+        label: "beneficiary create",
+        operationTimeoutMs: 0,
+        path: mutationPath("beneficiary.create"),
+        send,
+      });
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(signalWasAlreadyAborted).toBe(true);
       expect(journal.entries[0]).toMatchObject({
         status: "unresolved",
         submission_started_at: expect.any(String),
