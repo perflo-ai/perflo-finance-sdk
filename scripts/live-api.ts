@@ -17,6 +17,7 @@ import {
   activity,
   type BeneficiaryCountry,
   type BeneficiaryCreate,
+  type BeneficiaryGrantPaymentCreate,
   beneficiaries,
   beneficiaryCountries,
   beneficiarySchemas,
@@ -58,14 +59,13 @@ import {
   listServices,
   listSubscriptions,
   type MandateExecutionCreate,
-  mandateProviderGrants,
+  mandateBeneficiaryGrants,
   mandates,
   type OnboardingView,
   type OperationView,
   onboarding,
   PERFLO_API_ORIGIN,
   type PerfloClient,
-  type ProviderGrantPaymentCreate,
   type PurchaseCreate,
   pollDevice,
   pollOperationApproval,
@@ -77,8 +77,8 @@ import {
   type SpendingWithdrawalCreate,
   serviceCapabilities,
   services,
+  spendBeneficiaryGrant,
   spendingAccount,
-  spendProviderGrant,
   startDevice,
   startPerfloConnection,
   unfreezeCard,
@@ -126,10 +126,10 @@ const MUTATION_CONTRACTS = {
     path: (resourceId?: string) =>
       `/v1/mandates/${mutationResourceId("mandate.execute", resourceId)}/executions`,
   },
-  "provider_grant.spend": {
-    operationKind: "provider_grant_payment",
+  "beneficiary_grant.spend": {
+    operationKind: "beneficiary_grant_payment",
     path: (resourceId?: string) =>
-      `/v1/mandates/provider-grants/${mutationResourceId("provider_grant.spend", resourceId)}/payments`,
+      `/v1/mandates/beneficiary-grants/${mutationResourceId("beneficiary_grant.spend", resourceId)}/payments`,
   },
   "purchase.create": {
     operationKind: "service_purchase",
@@ -217,8 +217,8 @@ type MandateExecutionScenario = {
   mandate_id: string;
 };
 
-type ProviderGrantScenario = {
-  body: ProviderGrantPaymentCreate;
+type BeneficiaryGrantScenario = {
+  body: BeneficiaryGrantPaymentCreate;
   grant_id: string;
 };
 
@@ -228,7 +228,7 @@ type MutationFixtures = {
   cardCreate?: CardCreate;
   mandate?: CreateMandateData["body"];
   mandateExecution?: MandateExecutionScenario;
-  providerGrant?: ProviderGrantScenario;
+  beneficiaryGrant?: BeneficiaryGrantScenario;
   purchase?: PurchaseCreate;
   revealCardId?: string;
   transfer?: QuoteCreate;
@@ -304,7 +304,7 @@ const CONFIRMATION_ACTIONS: ReadonlySet<ConfirmationIntentCreate["action"]> =
     "mandate.create",
     "mandate.execute",
     "mandate.revoke",
-    "provider_grant.spend",
+    "beneficiary_grant.spend",
     "card.create",
     "card.freeze",
     "card.unfreeze",
@@ -342,30 +342,30 @@ Options:
   --help         Show this help
 
 Environment:
-  PERFLO_API_BASE_URL                 Override the configured API origin
-  PERFLO_CUSTOMER_TOKEN               Use an existing customer access token
-  PERFLO_CONFIRMED_ACCOUNT_EMAIL      Confirm a non-interactive account
-  PERFLO_LIVE_SERVICE_QUERY           Capability query; default: web search
-  PERFLO_LIVE_TRANSFER_QUOTE          QuoteCreate JSON for --quotes
-  PERFLO_LIVE_WEBHOOK_URL             Public HTTPS URL for --webhook
-  PERFLO_LIVE_BENEFICIARY             BeneficiaryCreate JSON
-  PERFLO_LIVE_CARD_CREATE             CardCreate JSON
-  PERFLO_LIVE_CARD_ACTION             {"action","card_id"} JSON
-  PERFLO_LIVE_MANDATE                 CreateMandateData["body"] JSON
-  PERFLO_LIVE_MANDATE_EXECUTION       {"mandate_id","body"} JSON
-  PERFLO_LIVE_PROVIDER_GRANT_PAYMENT  {"grant_id","body"} JSON
-  PERFLO_LIVE_PURCHASE                PurchaseCreate JSON
-  PERFLO_LIVE_SPENDING_WITHDRAWAL     SpendingWithdrawalCreate JSON
-  PERFLO_LIVE_TRANSFER                QuoteCreate JSON; quote then transfer
-  PERFLO_LIVE_SPENDING_WITHDRAWAL_ID  Existing withdrawal detail to read
-  PERFLO_LIVE_CARD_REVEAL_ID          Existing card to reveal with --mutations
-  PERFLO_LIVE_JOURNAL                 Journal path; default: ${DEFAULT_JOURNAL_PATH}
-  PERFLO_LIVE_RECONCILE_ENTRY_ID      Support-verified entry with no operation ID
-  PERFLO_LIVE_RECONCILE_OPERATION_ID  Support-verified operation for that entry
-  PERFLO_LIVE_RECONCILE_NO_OPERATION  Set to the entry ID when support proves no operation exists
-  PERFLO_LIVE_CONNECTION_TIMEOUT_MS   Account-connection polling timeout
-  PERFLO_LIVE_OPERATION_TIMEOUT_MS    Operation polling timeout
-  PERFLO_LIVE_REQUEST_TIMEOUT_MS      Timeout for each HTTP request
+  PERFLO_API_BASE_URL                    Override the configured API origin
+  PERFLO_CUSTOMER_TOKEN                  Use an existing customer access token
+  PERFLO_CONFIRMED_ACCOUNT_EMAIL         Confirm a non-interactive account
+  PERFLO_LIVE_SERVICE_QUERY              Capability query; default: web search
+  PERFLO_LIVE_TRANSFER_QUOTE             QuoteCreate JSON for --quotes
+  PERFLO_LIVE_WEBHOOK_URL                Public HTTPS URL for --webhook
+  PERFLO_LIVE_BENEFICIARY                BeneficiaryCreate JSON
+  PERFLO_LIVE_CARD_CREATE                CardCreate JSON
+  PERFLO_LIVE_CARD_ACTION                {"action","card_id"} JSON
+  PERFLO_LIVE_MANDATE                    CreateMandateData["body"] JSON
+  PERFLO_LIVE_MANDATE_EXECUTION          {"mandate_id","body"} JSON
+  PERFLO_LIVE_BENEFICIARY_GRANT_PAYMENT  {"grant_id","body"} JSON
+  PERFLO_LIVE_PURCHASE                   PurchaseCreate JSON
+  PERFLO_LIVE_SPENDING_WITHDRAWAL        SpendingWithdrawalCreate JSON
+  PERFLO_LIVE_TRANSFER                   QuoteCreate JSON; quote then transfer
+  PERFLO_LIVE_SPENDING_WITHDRAWAL_ID     Existing withdrawal detail to read
+  PERFLO_LIVE_CARD_REVEAL_ID             Existing card to reveal with --mutations
+  PERFLO_LIVE_JOURNAL                    Journal path; default: ${DEFAULT_JOURNAL_PATH}
+  PERFLO_LIVE_RECONCILE_ENTRY_ID         Support-verified entry with no operation ID
+  PERFLO_LIVE_RECONCILE_OPERATION_ID     Support-verified operation for that entry
+  PERFLO_LIVE_RECONCILE_NO_OPERATION     Set to the entry ID when support proves no operation exists
+  PERFLO_LIVE_CONNECTION_TIMEOUT_MS      Account-connection polling timeout
+  PERFLO_LIVE_OPERATION_TIMEOUT_MS       Operation polling timeout
+  PERFLO_LIVE_REQUEST_TIMEOUT_MS         Timeout for each HTTP request
 `);
 }
 
@@ -862,7 +862,7 @@ function isMandate(data: unknown): boolean {
   );
 }
 
-function isProviderGrant(data: unknown): boolean {
+function isBeneficiaryGrant(data: unknown): boolean {
   return (
     hasNonemptyStringFields(data, ["id", "expires_at", "status"]) &&
     isRecord(data) &&
@@ -907,8 +907,8 @@ function isPurchase(data: unknown): boolean {
     isMoney(data.max_price) &&
     isNullableString(data.next_reconcile_at) &&
     isNullableMoney(data.price) &&
-    (data.price_cap_enforcement === "upstream" ||
-      data.price_cap_enforcement === "local") &&
+    (data.price_cap_enforcement === "at_charge" ||
+      data.price_cap_enforcement === "preflight") &&
     isNullableString(data.service_id) &&
     PURCHASE_STATES.has(data.status as string) &&
     typeof data.submission_uncertain === "boolean" &&
@@ -977,7 +977,10 @@ const requireCardTransactions = requireItemsPageOf(
     [data.page, data.page_size, data.total, data.total_pages].every(isNumber),
 );
 const requireMandates = requireArrayOf("mandate", isMandate);
-const requireProviderGrants = requireArrayOf("provider grant", isProviderGrant);
+const requireBeneficiaryGrants = requireArrayOf(
+  "beneficiary grant",
+  isBeneficiaryGrant,
+);
 const requirePurchases = requireArrayOf("purchase", isPurchase);
 const requireServices = requireArrayOf("service", isService);
 const requireWebhooks = requireArrayOf(
@@ -1029,7 +1032,7 @@ const OPERATION_KINDS: ReadonlySet<string> = new Set([
   "mandate_revoke",
   "mandate_suspend",
   "mandate_transfer",
-  "provider_grant_payment",
+  "beneficiary_grant_payment",
   "service_purchase",
   "spending_withdrawal",
   "transfer",
@@ -1055,7 +1058,7 @@ function requireOperation(data: unknown): string | undefined {
     isNullableString(data.next_reconcile_at) &&
     isNullableString(data.resource_id) &&
     isNullableString(data.resource_type) &&
-    isNullableString(data.upstream_reference)
+    isNullableString(data.external_reference)
     ? undefined
     : "success response has no usable operation";
 }
@@ -1096,13 +1099,12 @@ function requireIdentity(data: unknown): string | undefined {
     : "success response has no usable customer identity";
 }
 
-const PERFLO_CONNECTION_STATES: ReadonlySet<string> = new Set([
-  "pending",
-  "connected",
-  "reconnect_required",
-  "operator_action_required",
-  "not_connected",
-]);
+// Typed as ReadonlySet<string> so .has() still takes an unnarrowed body value, but
+// constructed over the generated union so a member the contract drops fails to compile
+// here instead of silently staying accepted.
+const PERFLO_CONNECTION_STATES: ReadonlySet<string> = new Set<
+  OnboardingView["perflo_connection"]
+>(["pending", "connected", "reconnect_required", "not_connected"]);
 
 const CAPABILITY_FIELDS = [
   "accounts",
@@ -1398,9 +1400,9 @@ function parseMandateExecutionScenario(): MandateExecutionScenario | undefined {
   };
 }
 
-function parseProviderGrantScenario(): ProviderGrantScenario | undefined {
+function parseBeneficiaryGrantScenario(): BeneficiaryGrantScenario | undefined {
   const value = parseObjectEnvJson<Record<string, unknown>>(
-    "PERFLO_LIVE_PROVIDER_GRANT_PAYMENT",
+    "PERFLO_LIVE_BENEFICIARY_GRANT_PAYMENT",
   );
   if (!value) {
     return;
@@ -1415,11 +1417,11 @@ function parseProviderGrantScenario(): ProviderGrantScenario | undefined {
     value.body.beneficiary_id.length === 0
   ) {
     throw new TypeError(
-      "PERFLO_LIVE_PROVIDER_GRANT_PAYMENT requires nonempty grant_id and an object body with nonempty amount and beneficiary_id",
+      "PERFLO_LIVE_BENEFICIARY_GRANT_PAYMENT requires nonempty grant_id and an object body with nonempty amount and beneficiary_id",
     );
   }
   return {
-    body: value.body as ProviderGrantPaymentCreate,
+    body: value.body as BeneficiaryGrantPaymentCreate,
     grant_id: value.grant_id,
   };
 }
@@ -1480,7 +1482,7 @@ function readLiveConfig(selected = argv): LiveConfig {
           "PERFLO_LIVE_MANDATE",
         ),
         mandateExecution: parseMandateExecutionScenario(),
-        providerGrant: parseProviderGrantScenario(),
+        beneficiaryGrant: parseBeneficiaryGrantScenario(),
         purchase: parseObjectEnvJson<PurchaseCreate>("PERFLO_LIVE_PURCHASE"),
         revealCardId:
           process.env.PERFLO_LIVE_CARD_REVEAL_ID?.trim() || undefined,
@@ -1866,9 +1868,6 @@ async function ensurePerfloConnection(
     record("SKIP", "Perflo account connection", "disabled by --no-connect");
     return current;
   }
-  if (current.perflo_connection === "operator_action_required") {
-    throw new Error("Perflo connection requires operator action");
-  }
   if (current.perflo_connection === "reconnect_required") {
     console.log("The existing Perflo connection needs replacement.");
   }
@@ -2198,13 +2197,13 @@ async function runReadSweep(
   if (gate(capabilities.mandates)) {
     detailChecks.push(() =>
       check(
-        "provider grants",
-        () => mandateProviderGrants({ client }),
-        requireProviderGrants,
+        "beneficiary grants",
+        () => mandateBeneficiaryGrants({ client }),
+        requireBeneficiaryGrants,
       ),
     );
   } else {
-    record("SKIP", "provider grants", "capability unavailable");
+    record("SKIP", "beneficiary grants", "capability unavailable");
   }
 
   const firstOperation = operationRows?.[0];
@@ -3495,7 +3494,7 @@ async function runMutations(
     cardCreate,
     mandate,
     mandateExecution,
-    providerGrant,
+    beneficiaryGrant,
     purchase,
     revealCardId,
     transfer,
@@ -3507,7 +3506,7 @@ async function runMutations(
     cardAction,
     mandate,
     mandateExecution,
-    providerGrant,
+    beneficiaryGrant,
     purchase,
     withdrawal,
     transfer,
@@ -3692,34 +3691,37 @@ async function runMutations(
       }
     }
 
-    if (providerGrant) {
+    if (beneficiaryGrant) {
       if (!state.capabilities.mandates) {
-        record("SKIP", "provider grant payment", "capability unavailable");
+        record("SKIP", "beneficiary grant payment", "capability unavailable");
       } else {
         const payload = {
-          grant_id: providerGrant.grant_id,
-          ...providerGrant.body,
+          grant_id: beneficiaryGrant.grant_id,
+          ...beneficiaryGrant.body,
         };
         await runJournaledMutation({
-          action: "provider_grant.spend",
-          body: providerGrant.body,
+          action: "beneficiary_grant.spend",
+          body: beneficiaryGrant.body,
           client,
           confirmationPayload: payload,
           customerToken,
           journal,
           journalPath,
-          label: "provider grant payment",
+          label: "beneficiary grant payment",
           operationTimeoutMs,
-          path: mutationPath("provider_grant.spend", providerGrant.grant_id),
+          path: mutationPath(
+            "beneficiary_grant.spend",
+            beneficiaryGrant.grant_id,
+          ),
           send: ({ confirmationIntentId, idempotencyKey, signal }) =>
-            spendProviderGrant({
-              body: providerGrant.body,
+            spendBeneficiaryGrant({
+              body: beneficiaryGrant.body,
               client,
               headers: {
                 "Confirmation-Intent-ID": confirmationIntentId,
                 "Idempotency-Key": idempotencyKey,
               },
-              path: { grant_id: providerGrant.grant_id },
+              path: { grant_id: beneficiaryGrant.grant_id },
               signal,
             }),
         });

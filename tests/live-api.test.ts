@@ -56,7 +56,7 @@ import {
   createTransfer,
   executeMandate,
   freezeCard,
-  spendProviderGrant,
+  spendBeneficiaryGrant,
   unfreezeCard,
 } from "../src/index.js";
 
@@ -80,7 +80,7 @@ function operationFixture(
     state: "submitted",
     submission_uncertain: false,
     updated_at: "2026-08-14T10:00:01.000Z",
-    upstream_reference: null,
+    external_reference: null,
     ...overrides,
   };
 }
@@ -523,8 +523,8 @@ describe("live API exercise safety", () => {
     const body = { amount: "10.00" };
     const confirmation = { beneficiary_id: "beneficiary-1", ...body };
     const entry = createJournalEntry(
-      "provider_grant.spend",
-      mutationPath("provider_grant.spend", "grant-1"),
+      "beneficiary_grant.spend",
+      mutationPath("beneficiary_grant.spend", "grant-1"),
       body,
       confirmation,
     );
@@ -534,7 +534,7 @@ describe("live API exercise safety", () => {
       body,
       confirmation_payload: confirmation,
       method: "POST",
-      path: "/v1/mandates/provider-grants/grant-1/payments",
+      path: "/v1/mandates/beneficiary-grants/grant-1/payments",
     });
     expect(() =>
       requireMatchingOperation(
@@ -547,7 +547,7 @@ describe("live API exercise safety", () => {
         entry,
         operationFixture({
           created_at: "2026-08-14T09:54:00.000Z",
-          kind: "provider_grant_payment",
+          kind: "beneficiary_grant_payment",
           state: "succeeded",
           updated_at: "2026-08-14T09:54:00.000Z",
         }) as never,
@@ -558,7 +558,7 @@ describe("live API exercise safety", () => {
         entry,
         operationFixture({
           created_at: "2026-08-14T09:59:00.000Z",
-          kind: "provider_grant_payment",
+          kind: "beneficiary_grant_payment",
           state: "succeeded",
           updated_at: "2026-08-14T09:59:00.000Z",
         }) as never,
@@ -1136,9 +1136,9 @@ describe("live API exercise safety", () => {
           }),
       ],
       [
-        mutationPath("provider_grant.spend", "grant-1"),
+        mutationPath("beneficiary_grant.spend", "grant-1"),
         () =>
-          spendProviderGrant({
+          spendBeneficiaryGrant({
             body: {} as never,
             client,
             headers,
