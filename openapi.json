@@ -553,7 +553,7 @@
       },
       "BeneficiaryGrantView": {
         "additionalProperties": false,
-        "description": "Automatic-payment authority made directly on the Perflo account rather\nthan as a mandate.\n\nA grant can be retired in the Perflo app. No reservation ledger is kept\nagainst it and no mandate records it, so concurrent spending by another client\nsharing the account is bounded only by the grant's own caps. One payment is\nspent from it on the owner's explicit, separately confirmed instruction,\nchecked against a live read immediately beforehand.",
+        "description": "Automatic-payment authority made directly on the Perflo account rather\nthan as a mandate.\n\nA grant can be revoked with POST\n/v1/mandates/beneficiary-grants/{grant_id}/revoke, or in the Perflo app. No\nreservation ledger is kept against it and no mandate records it, so concurrent\nspending by another client sharing the account is bounded only by the grant's\nown caps. One payment is spent from it on the owner's explicit, separately\nconfirmed instruction, checked against a live read immediately beforehand.",
         "properties": {
           "destination": {
             "anyOf": [
@@ -2040,6 +2040,7 @@
               "mandate.execute",
               "mandate.revoke",
               "beneficiary_grant.spend",
+              "beneficiary_grant.revoke",
               "card.create",
               "card.freeze",
               "card.unfreeze",
@@ -2900,6 +2901,7 @@
             "enum": [
               "beneficiary_create",
               "beneficiary_grant_payment",
+              "beneficiary_grant_revoke",
               "card_close",
               "card_create",
               "card_freeze",
@@ -8641,7 +8643,7 @@
     },
     "/v1/mandates/beneficiary-grants": {
       "get": {
-        "description": "Lists the automatic-payment authority made directly on the Perflo account rather than as a mandate. Admits a customer token and answers synchronously. A grant can be retired in the Perflo app. No reservation ledger is kept against it and no mandate records it; POST /v1/mandates/beneficiary-grants/{grant_id}/payments spends one payment from a listed grant on the owner's explicit, separately confirmed instruction. The payout destination is published in full. An empty list means the account carries no such authority at the moment of the read; a read that fails answers a problem document rather than an empty list.",
+        "description": "Lists the automatic-payment authority made directly on the Perflo account rather than as a mandate. Admits a customer token and answers synchronously. A grant can be revoked with POST /v1/mandates/beneficiary-grants/{grant_id}/revoke, or in the Perflo app. No reservation ledger is kept against it and no mandate records it; POST /v1/mandates/beneficiary-grants/{grant_id}/payments spends one payment from a listed grant on the owner's explicit, separately confirmed instruction. The payout destination is published in full. An empty list means the account carries no such authority at the moment of the read; a read that fails answers a problem document rather than an empty list.",
         "operationId": "mandate_beneficiary_grants",
         "responses": {
           "200": {
@@ -8782,7 +8784,7 @@
     },
     "/v1/mandates/beneficiary-grants/{grant_id}/payments": {
       "post": {
-        "description": "Makes one payment against automatic-payment authority that already exists on the customer's Perflo account rather than as a mandate, and answers 202 with the operation that tracks it. The grant is named by the identifier GET /v1/mandates/beneficiary-grants publishes. Admits a customer token carrying a fresh iat, a Confirmation-Intent-ID naming the confirmed intent for this action, and an Idempotency-Key. The request names the saved beneficiary the payment must reach, and the payment is submitted only while this grant is still active, unexpired, has a payment left, allows the amount, and pays exactly that beneficiary's destination -- checked once when the operation opens and again immediately before submission. This grant can be retired in the Perflo app. No reservation ledger is kept against it and no mandate records it, so concurrent spending by another client sharing the account is bounded only by the grant's own caps. The Idempotency-Key header binds for at least the replay window published by GET /v1/identity. Inside that guaranteed window an equal replay returns the same operation with Idempotent-Replayed set to true. A client with an unresolved response must stop before the window ends and reconcile operation history rather than retry later. A transport-uncertain write leaves the operation indeterminate and is never repeated.",
+        "description": "Makes one payment against automatic-payment authority that already exists on the customer's Perflo account rather than as a mandate, and answers 202 with the operation that tracks it. The grant is named by the identifier GET /v1/mandates/beneficiary-grants publishes. Admits a customer token carrying a fresh iat, a Confirmation-Intent-ID naming the confirmed intent for this action, and an Idempotency-Key. The request names the saved beneficiary the payment must reach, and the payment is submitted only while this grant is still active, unexpired, has a payment left, allows the amount, and pays exactly that beneficiary's destination -- checked once when the operation opens and again immediately before submission. This grant can be revoked with POST /v1/mandates/beneficiary-grants/{grant_id}/revoke, or in the Perflo app. No reservation ledger is kept against it and no mandate records it, so concurrent spending by another client sharing the account is bounded only by the grant's own caps. The Idempotency-Key header binds for at least the replay window published by GET /v1/identity. Inside that guaranteed window an equal replay returns the same operation with Idempotent-Replayed set to true. A client with an unresolved response must stop before the window ends and reconcile operation history rather than retry later. A transport-uncertain write leaves the operation indeterminate and is never repeated.",
         "operationId": "spend_beneficiary_grant",
         "parameters": [
           {
@@ -8970,6 +8972,191 @@
           }
         ],
         "summary": "Spend a beneficiary grant",
+        "tags": [
+          "Mandates"
+        ]
+      }
+    },
+    "/v1/mandates/beneficiary-grants/{grant_id}/revoke": {
+      "post": {
+        "description": "Revokes one automatic-payment grant made directly on the customer's Perflo account and answers 202 with the operation that tracks it. The grant is named by the identifier GET /v1/mandates/beneficiary-grants publishes, and only a grant that route lists can be revoked here; a mandate's own grant is revoked with the mandate through POST /v1/mandates/{mandate_id}/revoke. Admits a customer token carrying a fresh iat, a Confirmation-Intent-ID naming the confirmed intent for this action, and an Idempotency-Key. Revocation is terminal, and no further payment is made under the grant. The Idempotency-Key header binds for at least the replay window published by GET /v1/identity. Inside that guaranteed window an equal replay returns the same operation with Idempotent-Replayed set to true. A client with an unresolved response must stop before the window ends and reconcile operation history rather than retry later. A transport-uncertain write leaves the operation indeterminate and is never repeated.",
+        "operationId": "revoke_beneficiary_grant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "title": "Grant Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "One-use, transaction-bound confirmation.",
+            "in": "header",
+            "name": "Confirmation-Intent-ID",
+            "required": true,
+            "schema": {
+              "description": "One-use, transaction-bound confirmation.",
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Confirmation-Intent-Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unique key for one canonical mutation request.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique key for one canonical mutation request.",
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Sent with the literal value true only when this response replays a previously accepted request under the same idempotency key. Absent on a first acceptance; never sent as false.",
+                "schema": {
+                  "enum": [
+                    "true"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Revoke a beneficiary grant",
         "tags": [
           "Mandates"
         ]

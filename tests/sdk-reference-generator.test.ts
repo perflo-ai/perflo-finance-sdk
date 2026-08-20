@@ -111,7 +111,7 @@ describe("SDK reference generator", () => {
       Cards: 7,
       Identity: 3,
       KYC: 2,
-      Mandates: 11,
+      Mandates: 12,
       Onboarding: 4,
       Operations: 4,
       "Perflo device tokens": 7,
@@ -121,10 +121,10 @@ describe("SDK reference generator", () => {
       Webhooks: 3,
     };
 
-    expect(rows).toHaveLength(61);
-    expect(new Set(functionNames).size).toBe(61);
+    expect(rows).toHaveLength(62);
+    expect(new Set(functionNames).size).toBe(62);
     expect(page.match(/^### /gmu)).toHaveLength(14);
-    expect(result.stdout).toContain("61 operations across 14 domains");
+    expect(result.stdout).toContain("62 operations across 14 domains");
     expect(
       page.startsWith(`<p>Before the generated region.</p>\n${startMarker}\n`),
     ).toBe(true);
@@ -205,7 +205,7 @@ describe("SDK reference generator", () => {
     );
     expect(
       operationRows(page).filter((row) => row.includes("| Bearer |")),
-    ).toHaveLength(55);
+    ).toHaveLength(56);
   });
 
   it("escapes MDX-sensitive OpenAPI text", async () => {

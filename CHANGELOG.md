@@ -4,6 +4,15 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+- Added `revokeBeneficiaryGrant` for
+  `POST /v1/mandates/beneficiary-grants/{grant_id}/revoke`, which ends one
+  automatic-payment grant held directly on the customer's Perflo account and
+  answers with the operation that tracks it. It takes the new confirmation
+  action `beneficiary_grant.revoke` over `{"grant_id":"grant_id"}` and produces
+  the new operation kind `beneficiary_grant_revoke` (additive)
+
+## 0.1.0-beta.11 - 2026-08-19
+
 - Renamed the grant surface so it uses the same word as the rest of the API:
   `mandateProviderGrants` and `spendProviderGrant` are now
   `mandateBeneficiaryGrants` and `spendBeneficiaryGrant`; `ProviderGrantView`

@@ -298,21 +298,35 @@ type AuthorizedCustomer = {
   wallet?: string;
 };
 
+// The vocabulary of confirmation actions the API publishes, kept exhaustive by the
+// compiler the same way as the operation kinds below. It is not the set of actions this
+// script performs -- MUTATION_CONTRACTS is that, and neither set contains the other -- so
+// a member added here changes nothing but what isConfirmationAction will admit.
+const CONFIRMATION_ACTION_FLAGS: Record<
+  ConfirmationIntentCreate["action"],
+  true
+> = {
+  "beneficiary_grant.revoke": true,
+  "beneficiary_grant.spend": true,
+  "card.close": true,
+  "card.create": true,
+  "card.freeze": true,
+  "card.reveal": true,
+  "card.unfreeze": true,
+  "mandate.create": true,
+  "mandate.execute": true,
+  "mandate.revoke": true,
+  "purchase.create": true,
+  "spending_withdrawal.create": true,
+  "transfer.create": true,
+};
+
 const CONFIRMATION_ACTIONS: ReadonlySet<ConfirmationIntentCreate["action"]> =
-  new Set([
-    "transfer.create",
-    "mandate.create",
-    "mandate.execute",
-    "mandate.revoke",
-    "beneficiary_grant.spend",
-    "card.create",
-    "card.freeze",
-    "card.unfreeze",
-    "card.close",
-    "card.reveal",
-    "purchase.create",
-    "spending_withdrawal.create",
-  ]);
+  new Set(
+    Object.keys(CONFIRMATION_ACTION_FLAGS) as Array<
+      ConfirmationIntentCreate["action"]
+    >,
+  );
 
 function mutationPath(action: MutationAction, resourceId?: string): string {
   return MUTATION_CONTRACTS[action].path(resourceId);
@@ -1022,22 +1036,31 @@ const OPERATION_STATES: ReadonlySet<string> = new Set([
   "cancelled",
 ]);
 
-const OPERATION_KINDS: ReadonlySet<string> = new Set([
-  "beneficiary_create",
-  "card_close",
-  "card_create",
-  "card_freeze",
-  "card_unfreeze",
-  "mandate_create",
-  "mandate_revoke",
-  "mandate_suspend",
-  "mandate_transfer",
-  "beneficiary_grant_payment",
-  "service_purchase",
-  "spending_withdrawal",
-  "transfer",
-  "transfer_grant_revoke",
-]);
+// A mirror of the generated kind union, kept exhaustive by the compiler in both
+// directions: Record demands an entry for every member, and the annotation refuses one
+// the union does not name. A hand-written set would drift the day a kind is added and
+// let the new kind through as an unrecognized operation.
+const OPERATION_KIND_FLAGS: Record<OperationView["kind"], true> = {
+  beneficiary_create: true,
+  beneficiary_grant_payment: true,
+  beneficiary_grant_revoke: true,
+  card_close: true,
+  card_create: true,
+  card_freeze: true,
+  card_unfreeze: true,
+  mandate_create: true,
+  mandate_revoke: true,
+  mandate_suspend: true,
+  mandate_transfer: true,
+  service_purchase: true,
+  spending_withdrawal: true,
+  transfer: true,
+  transfer_grant_revoke: true,
+};
+
+const OPERATION_KINDS: ReadonlySet<string> = new Set(
+  Object.keys(OPERATION_KIND_FLAGS),
+);
 
 function requireOperation(data: unknown): string | undefined {
   return hasNonemptyStringFields(data, [
