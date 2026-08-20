@@ -10,6 +10,13 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
   answers with the operation that tracks it. It takes the new confirmation
   action `beneficiary_grant.revoke` over `{"grant_id":"grant_id"}` and produces
   the new operation kind `beneficiary_grant_revoke` (additive)
+- Added `revokeAllMandates` for `POST /v1/mandates/revoke-all`, which stops every
+  agent's authority on the account in one call: it revokes every active pairing
+  and opens one mandate revocation for each mandate that still holds authority.
+  It takes the new confirmation action `mandate.revoke_all` over `{}`, produces
+  the new operation kind `mandate_revoke_all`, and answers with the new
+  `MandateRevocationBatchView` carrying the batch, one operation per revocation,
+  and the revoked pairing identifiers (additive)
 
 ## 0.1.0-beta.11 - 2026-08-19
 

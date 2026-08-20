@@ -2039,6 +2039,7 @@
               "mandate.create",
               "mandate.execute",
               "mandate.revoke",
+              "mandate.revoke_all",
               "beneficiary_grant.spend",
               "beneficiary_grant.revoke",
               "card.create",
@@ -2466,6 +2467,39 @@
           "amount"
         ],
         "title": "MandateExecutionCreate",
+        "type": "object"
+      },
+      "MandateRevocationBatchView": {
+        "additionalProperties": false,
+        "description": "The record of one account-wide revocation of every agent's authority.\n\nThe batch is settled the moment it is answered, and it names the revocations it\nopened rather than their outcome: every pairing it lists is already revoked, while\neach mandate revocation carries its own state and a beneficiary-payment revocation\nsettles only once its exact grant is revoked.",
+        "properties": {
+          "mandate_operations": {
+            "description": "One operation for each mandate revocation the batch opened, in the order the batch recorded them; empty when no mandate still held authority.",
+            "items": {
+              "$ref": "#/components/schemas/OperationView"
+            },
+            "title": "Mandate Operations",
+            "type": "array"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/OperationView",
+            "description": "The operation recording the batch itself, already settled."
+          },
+          "revoked_pairing_ids": {
+            "description": "The pairings the batch revoked, named by the identifier GET /v1/mandates publishes in authorized_clients; empty when none was active.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Revoked Pairing Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "operation",
+          "mandate_operations",
+          "revoked_pairing_ids"
+        ],
+        "title": "MandateRevocationBatchView",
         "type": "object"
       },
       "MandateView": {
@@ -2908,6 +2942,7 @@
               "card_unfreeze",
               "mandate_create",
               "mandate_revoke",
+              "mandate_revoke_all",
               "mandate_suspend",
               "mandate_transfer",
               "service_purchase",
@@ -9157,6 +9192,182 @@
           }
         ],
         "summary": "Revoke a beneficiary grant",
+        "tags": [
+          "Mandates"
+        ]
+      }
+    },
+    "/v1/mandates/revoke-all": {
+      "post": {
+        "description": "Stops every agent's authority on the account in one call. Every active pairing is revoked immediately, and one mandate revocation opens for each mandate that still holds authority: a service-purchase mandate becomes revoked in the same transaction, and a beneficiary-payment mandate moves to revocation_pending while its exact grant is revoked. Admits a customer token carrying a fresh iat, a Confirmation-Intent-ID naming the confirmed intent for this action, and an Idempotency-Key. Answers 202 with the batch, the operation opened for each revocation, and the revoked pairing identifiers; the batch records which revocations were opened, and each operation carries its own outcome. A mandate already revoked, awaiting approval, refused at approval, awaiting revocation, or holding no exact authority opens no revocation, and neither does a service-purchase mandate past its expiry, whose expiry already ended its authority; any pairing it has is cut all the same. Revocation is terminal: no path re-grants the authority. An equal replay under the same Idempotency-Key returns the same batch. The Idempotency-Key header binds for at least the replay window published by GET /v1/identity. Inside that guaranteed window an equal replay returns the same operation with Idempotent-Replayed set to true. A client with an unresolved response must stop before the window ends and reconcile operation history rather than retry later. A transport-uncertain write leaves the operation indeterminate and is never repeated.",
+        "operationId": "revoke_all_mandates",
+        "parameters": [
+          {
+            "description": "One-use, transaction-bound confirmation.",
+            "in": "header",
+            "name": "Confirmation-Intent-ID",
+            "required": true,
+            "schema": {
+              "description": "One-use, transaction-bound confirmation.",
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Confirmation-Intent-Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unique key for one canonical mutation request.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique key for one canonical mutation request.",
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateRevocationBatchView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Sent with the literal value true only when this response replays a previously accepted request under the same idempotency key. Absent on a first acceptance; never sent as false.",
+                "schema": {
+                  "enum": [
+                    "true"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Revoke every agent's authority",
         "tags": [
           "Mandates"
         ]

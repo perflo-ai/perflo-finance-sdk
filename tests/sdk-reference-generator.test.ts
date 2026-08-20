@@ -111,7 +111,7 @@ describe("SDK reference generator", () => {
       Cards: 7,
       Identity: 3,
       KYC: 2,
-      Mandates: 12,
+      Mandates: 13,
       Onboarding: 4,
       Operations: 4,
       "Perflo device tokens": 7,
@@ -121,10 +121,10 @@ describe("SDK reference generator", () => {
       Webhooks: 3,
     };
 
-    expect(rows).toHaveLength(62);
-    expect(new Set(functionNames).size).toBe(62);
+    expect(rows).toHaveLength(63);
+    expect(new Set(functionNames).size).toBe(63);
     expect(page.match(/^### /gmu)).toHaveLength(14);
-    expect(result.stdout).toContain("62 operations across 14 domains");
+    expect(result.stdout).toContain("63 operations across 14 domains");
     expect(
       page.startsWith(`<p>Before the generated region.</p>\n${startMarker}\n`),
     ).toBe(true);
@@ -205,7 +205,7 @@ describe("SDK reference generator", () => {
     );
     expect(
       operationRows(page).filter((row) => row.includes("| Bearer |")),
-    ).toHaveLength(56);
+    ).toHaveLength(57);
   });
 
   it("escapes MDX-sensitive OpenAPI text", async () => {
@@ -243,10 +243,18 @@ describe("SDK reference generator", () => {
     );
   });
 
+  it("accepts a current page", async () => {
+    const fixture = await createFixture();
+    await runGenerator(fixture);
+
+    await expect(runGenerator(fixture, "--check")).resolves.toMatchObject({
+      stdout: expect.stringContaining("reference check passed"),
+    });
+  });
+
   it("detects a stale page without modifying it", async () => {
     const fixture = await createFixture();
     await runGenerator(fixture);
-    await runGenerator(fixture, "--check");
     const current = await readFile(fixture.pagePath, "utf8");
     const stale = current.replace("List deposit accounts", "Stale purpose");
     await writeFile(fixture.pagePath, stale);
@@ -255,11 +263,6 @@ describe("SDK reference generator", () => {
       stderr: expect.stringContaining("out of date"),
     });
     expect(await readFile(fixture.pagePath, "utf8")).toBe(stale);
-
-    await runGenerator(fixture);
-    await expect(runGenerator(fixture, "--check")).resolves.toMatchObject({
-      stdout: expect.stringContaining("reference check passed"),
-    });
   });
 
   it.each([
