@@ -101,6 +101,20 @@ if (isSubmissionUncertain(result.error)) {
 
 If a problem response sets `submission_uncertain` to `true`, stop replacement writes and reconcile the recorded operation. Read the [TypeScript SDK guide](https://docs.perflo.ai/developers/get-started/typescript-sdk) for the transfer flow and recovery rules. Use the [TypeScript SDK reference](https://docs.perflo.ai/developers/reference/typescript-sdk) for the complete client and generated operation surface.
 
+## Check a verification URL
+
+A `kyc_session` action carries an HTTPS URL to open in the customer's browser. `isAllowedVerificationUrl(value)` decides whether that URL is one a browser may be sent to, and it is the same rule the API enforces on a `kyc_session` action's `url`:
+
+```typescript
+import { isAllowedVerificationUrl } from "@perflo/finance-sdk";
+
+if (!isAllowedVerificationUrl(action.url)) {
+  // Send the customer to your own verification page instead.
+}
+```
+
+It returns `true` for an HTTPS URL that states no credentials and names a host of at least two ASCII labels of letters, digits and inner hyphens, none of them `localhost` and none beginning `xn--`, each label at most 63 characters and the host at most 253, with one trailing dot allowed and a final label that is neither all digits nor `0x` hex. A zero or empty port, a percent sign or bracket in the authority, and a backslash, a space or an ASCII control character anywhere are refused. A non-string value returns `false`. Ownership, name resolution, and reachability are not checked.
+
 ## Update the contract
 
 Replace `openapi.json` with the reviewed Perflo Finance contract and open a pull request. Continuous integration generates the client, compiles the public API, runs runtime and type tests, and validates the package tarball. Regenerate and check the SDK-owned method matrix in the sibling docs repository as described in the [contribution guide](https://github.com/perflo-ai/perflo-finance-sdk/blob/master/CONTRIBUTING.md); ordinary package builds never modify it automatically.

@@ -52,6 +52,7 @@ import {
   getPurchase,
   getService,
   getSpendingWithdrawal,
+  isAllowedVerificationUrl,
   isDefinitiveNoOperation,
   kycStatus,
   listActivity,
@@ -1322,10 +1323,8 @@ function requireKycAction(data: unknown): string | undefined {
   ) {
     return "success response has no usable KYC browser action";
   }
-  try {
-    requireTrustedAppUrl(data.url as string);
-  } catch {
-    return "success response has an untrusted KYC browser action";
+  if (!isAllowedVerificationUrl(data.url)) {
+    return "success response has a KYC browser action outside the allowed URL policy";
   }
   if (typeof data.expires_at === "string") {
     const expiresAt = Date.parse(data.expires_at);
@@ -2405,11 +2404,9 @@ async function runKycSession(
   record(
     "PASS",
     "KYC browser session",
-    `${created.response?.status ?? "ok"}, trusted hosted action`,
+    `${created.response?.status ?? "ok"}, allowed hosted action`,
   );
-  console.log(
-    `Open the one-time KYC URL in your browser:\n${created.data.url}\n`,
-  );
+  console.log(`Open the KYC URL in your browser:\n${created.data.url}\n`);
 }
 
 async function runWebhook(

@@ -4,6 +4,21 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+- Added `beneficiaryAddressCountries`, `beneficiaryByNickname`, and
+  `renameBeneficiary` for the synchronous beneficiary metadata routes. Rename
+  trims the label, accepts `null` or blank input to clear it, and reports
+  `beneficiary_nickname_taken` when the label is already carried by another
+  beneficiary (additive)
+- Hosted KYC actions can carry the customer-specific HTTPS URL Perflo states.
+  The URL check requires a URL that states no credentials and a host of at least
+  two ASCII labels of letters, digits and inner hyphens, none of them
+  `localhost`, none beginning `xn--`, and a final label that is neither all
+  digits nor `0x` hex; it does not verify ownership, name resolution, or
+  reachability (additive)
+- `isAllowedVerificationUrl` is exported: the verification-URL rule the API
+  enforces, tested against `verification-url-corpus.json` (additive)
+- `POST /v1/beneficiaries` and `PATCH /v1/beneficiaries/{beneficiary_id}` bound
+  `nickname` at 80 characters after trimming (additive)
 - Added `revokeBeneficiaryGrant` for
   `POST /v1/mandates/beneficiary-grants/{grant_id}/revoke`, which ends one
   automatic-payment grant held directly on the customer's Perflo account and

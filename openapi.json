@@ -183,6 +183,50 @@
         "title": "ActivityView",
         "type": "object"
       },
+      "AddressCountryView": {
+        "additionalProperties": false,
+        "description": "A country accepted in a beneficiary address.",
+        "properties": {
+          "aliases": {
+            "description": "Alternative names accepted for the country.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "alpha3": {
+            "description": "The ISO 3166-1 alpha-3 country code.",
+            "maxLength": 3,
+            "minLength": 3,
+            "pattern": "^[A-Z]{3}$",
+            "title": "Alpha3",
+            "type": "string"
+          },
+          "code": {
+            "description": "The ISO 3166-1 alpha-2 country code.",
+            "maxLength": 2,
+            "minLength": 2,
+            "pattern": "^[A-Z]{2}$",
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "description": "The country's display name.",
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "alpha3",
+          "name",
+          "aliases"
+        ],
+        "title": "AddressCountryView",
+        "type": "object"
+      },
       "AgentPairingView": {
         "additionalProperties": false,
         "description": "A customer-approved agent pairing for one mandate.",
@@ -422,7 +466,7 @@
                 "type": "null"
               }
             ],
-            "description": "The customer's private label for the beneficiary.",
+            "description": "The customer's private label for the beneficiary, trimmed and at most 80 characters; a blank value is null.",
             "title": "Nickname"
           },
           "payout_schema_id": {
@@ -704,6 +748,30 @@
           "authorized_rules"
         ],
         "title": "BeneficiaryMandateCreate",
+        "type": "object"
+      },
+      "BeneficiaryNicknameUpdate": {
+        "additionalProperties": false,
+        "description": "The request that changes or clears a beneficiary's private label.",
+        "properties": {
+          "nickname": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The new private label, trimmed and at most 80 characters; null or a blank value clears it.",
+            "title": "Nickname"
+          }
+        },
+        "required": [
+          "nickname"
+        ],
+        "title": "BeneficiaryNicknameUpdate",
         "type": "object"
       },
       "BeneficiarySchemaView": {
@@ -3925,7 +3993,7 @@
             "title": "Poll After Ms"
           },
           "url": {
-            "description": "The URL for the browser to open. It is always on the trusted Perflo application origin; a URL outside that origin is refused with 502.",
+            "description": "The URL for the browser to open. A verification session can use a stated HTTPS host of at least two ASCII labels of letters, digits and inner hyphens, none of them `localhost`, none beginning `xn--`, and a final label that is neither all digits nor `0x` hex; ownership, name resolution and reachability are not checked. Every other action uses the configured Perflo application origin. Every URL published here is within those bounds.",
             "title": "Url",
             "type": "string"
           }
@@ -5836,6 +5904,296 @@
         ]
       }
     },
+    "/v1/beneficiaries/address-countries": {
+      "get": {
+        "description": "Lists the countries accepted in beneficiary address fields. Admits a customer token and answers synchronously. This list is independent from residence and payout-destination countries.",
+        "operationId": "beneficiary_address_countries",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AddressCountryView"
+                  },
+                  "title": "Response Beneficiary Address Countries",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List beneficiary address countries",
+        "tags": [
+          "Beneficiaries"
+        ]
+      }
+    },
+    "/v1/beneficiaries/by-nickname/{nickname}": {
+      "get": {
+        "description": "Returns the customer's beneficiary carrying the exact private label. Admits a customer token, answers synchronously, and answers 404 when no current beneficiary can be joined to that label.",
+        "operationId": "beneficiary_by_nickname",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nickname",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Nickname",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BeneficiaryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Find a beneficiary by nickname",
+        "tags": [
+          "Beneficiaries"
+        ]
+      }
+    },
     "/v1/beneficiaries/countries": {
       "get": {
         "description": "Lists the payout countries currently accepted for new beneficiaries. Admits a customer token and answers synchronously.",
@@ -6274,6 +6632,162 @@
           }
         ],
         "summary": "Read a beneficiary",
+        "tags": [
+          "Beneficiaries"
+        ]
+      },
+      "patch": {
+        "description": "Changes or clears the customer's private label and returns the updated beneficiary. Admits a customer token and answers synchronously. A null or blank nickname clears the label. Answers 409 when another beneficiary already carries the requested label.",
+        "operationId": "rename_beneficiary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "beneficiary_id",
+            "required": true,
+            "schema": {
+              "title": "Beneficiary Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeneficiaryNicknameUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BeneficiaryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Relabel a beneficiary",
         "tags": [
           "Beneficiaries"
         ]
@@ -8201,7 +8715,7 @@
     },
     "/v1/kyc/sessions": {
       "post": {
-        "description": "Creates the hosted identity-verification hand-off. Admits a customer token and answers synchronously with a redirect on the trusted Perflo application origin, recording no operation. Answers 503 when the linked Perflo connection does not carry the verification capability.",
+        "description": "Admits a customer token and answers synchronously with the hosted identity-verification hand-off: the verification page Perflo states for this customer or, when none is stated, the verification page on the configured Perflo application origin, recording no operation. Answers 503 when the linked Perflo connection does not carry the verification capability.",
         "operationId": "create_kyc_session",
         "responses": {
           "201": {
