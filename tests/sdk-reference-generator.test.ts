@@ -108,7 +108,7 @@ describe("SDK reference generator", () => {
       Accounts: 2,
       Activity: 1,
       Beneficiaries: 8,
-      Cards: 7,
+      Cards: 15,
       Identity: 3,
       KYC: 2,
       Mandates: 13,
@@ -121,10 +121,10 @@ describe("SDK reference generator", () => {
       Webhooks: 3,
     };
 
-    expect(rows).toHaveLength(66);
-    expect(new Set(functionNames).size).toBe(66);
+    expect(rows).toHaveLength(74);
+    expect(new Set(functionNames).size).toBe(74);
     expect(page.match(/^### /gmu)).toHaveLength(14);
-    expect(result.stdout).toContain("66 operations across 14 domains");
+    expect(result.stdout).toContain("74 operations across 14 domains");
     expect(
       page.startsWith(`<p>Before the generated region.</p>\n${startMarker}\n`),
     ).toBe(true);
@@ -208,7 +208,7 @@ describe("SDK reference generator", () => {
     );
     expect(
       operationRows(page).filter((row) => row.includes("| Bearer |")),
-    ).toHaveLength(60);
+    ).toHaveLength(68);
   });
 
   it("escapes MDX-sensitive OpenAPI text", async () => {

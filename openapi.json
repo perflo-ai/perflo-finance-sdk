@@ -1001,6 +1001,81 @@
         "title": "CapabilityView",
         "type": "object"
       },
+      "CardAccountView": {
+        "additionalProperties": false,
+        "description": "The customer's card-account profile and funding totals.",
+        "properties": {
+          "deposit_balance": {
+            "$ref": "#/components/schemas/NonNegativeMoney",
+            "description": "The current card-account deposit balance in United States dollars."
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The stated email address; null when none is stated.",
+            "title": "Email"
+          },
+          "kyc_raw_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The status string as stated; null when none was stated.",
+            "title": "Kyc Raw Status"
+          },
+          "kyc_status": {
+            "description": "The normalized card-verification status.",
+            "enum": [
+              "not_started",
+              "in_progress",
+              "action_required",
+              "under_review",
+              "approved",
+              "rejected",
+              "expired",
+              "unknown"
+            ],
+            "title": "Kyc Status",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The stated name; null when nothing is stated.",
+            "title": "Name"
+          },
+          "total_deposited": {
+            "$ref": "#/components/schemas/NonNegativeMoney",
+            "description": "The total amount deposited into the card account in United States dollars."
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "kyc_status",
+          "kyc_raw_status",
+          "deposit_balance",
+          "total_deposited"
+        ],
+        "title": "CardAccountView",
+        "type": "object"
+      },
       "CardCreate": {
         "additionalProperties": false,
         "description": "The request that records a card issuance.\n\nThe card is provisioned for the customer, so their private label is the\nonly input.",
@@ -1015,11 +1090,293 @@
                 "type": "null"
               }
             ],
-            "description": "The customer's private label for the card.",
+            "description": "The customer's private label for the card, trimmed and at most 80 characters; a blank value is null.",
             "title": "Nickname"
           }
         },
         "title": "CardCreate",
+        "type": "object"
+      },
+      "CardDepositAddressView": {
+        "additionalProperties": false,
+        "description": "The destination and terms for funding the customer's card account.",
+        "properties": {
+          "accepted_assets": {
+            "description": "The assets accepted at the address, in preference order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Accepted Assets",
+            "type": "array"
+          },
+          "asset": {
+            "description": "The primary asset accepted at the address.",
+            "title": "Asset",
+            "type": "string"
+          },
+          "card_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The card identifier; null when no current card resolves it.",
+            "title": "Card Id"
+          },
+          "card_nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The card's private label; null when the card carries no label.",
+            "title": "Card Nickname"
+          },
+          "chain": {
+            "description": "The network the address accepts deposits on.",
+            "title": "Chain",
+            "type": "string"
+          },
+          "deposit_address": {
+            "description": "The card-account deposit address in full, readable only with the linked customer's own token.",
+            "title": "Deposit Address",
+            "type": "string"
+          },
+          "min_amount": {
+            "$ref": "#/components/schemas/NonNegativeMoney",
+            "description": "The minimum accepted deposit in United States dollars."
+          },
+          "note": {
+            "description": "Funding guidance stated for the address.",
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deposit_address",
+          "card_id",
+          "card_nickname",
+          "chain",
+          "asset",
+          "accepted_assets",
+          "min_amount",
+          "note"
+        ],
+        "title": "CardDepositAddressView",
+        "type": "object"
+      },
+      "CardDepositListView": {
+        "additionalProperties": false,
+        "description": "The customer's card-account deposits and credited total.",
+        "properties": {
+          "card_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The card identifier; null when no current card resolves it.",
+            "title": "Card Id"
+          },
+          "deposits": {
+            "description": "The deposits in the result.",
+            "items": {
+              "$ref": "#/components/schemas/CardDepositView"
+            },
+            "title": "Deposits",
+            "type": "array"
+          },
+          "total_credited": {
+            "$ref": "#/components/schemas/NonNegativeMoney",
+            "description": "The total credited deposit value in United States dollars."
+          }
+        },
+        "required": [
+          "card_id",
+          "deposits",
+          "total_credited"
+        ],
+        "title": "CardDepositListView",
+        "type": "object"
+      },
+      "CardDepositView": {
+        "additionalProperties": false,
+        "description": "One deposit into the customer's card account.",
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/NonNegativeMoney",
+            "description": "The deposit's value in United States dollars."
+          },
+          "asset": {
+            "description": "The deposited asset, passed through unchanged.",
+            "title": "Asset",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "When the deposit was recorded.",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "description": "The identifier for the deposit.",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "The deposit status, passed through unchanged. The set of values is open, so branch on the ones a client acts on and carry the rest through.",
+            "title": "Status",
+            "type": "string"
+          },
+          "tx_hash": {
+            "description": "The transaction hash for the deposit.",
+            "title": "Tx Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "asset",
+          "amount",
+          "status",
+          "tx_hash",
+          "created_at"
+        ],
+        "title": "CardDepositView",
+        "type": "object"
+      },
+      "CardKycSessionView": {
+        "additionalProperties": false,
+        "description": "A hosted card-verification session.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/RedirectAction",
+            "description": "The hosted verification session to open."
+          },
+          "applicant_id": {
+            "description": "The verification applicant identifier.",
+            "title": "Applicant Id",
+            "type": "string"
+          },
+          "kyc_raw_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The status string as stated; null when none was stated.",
+            "title": "Kyc Raw Status"
+          },
+          "kyc_status": {
+            "description": "The normalized card-verification status at session creation.",
+            "enum": [
+              "not_started",
+              "in_progress",
+              "action_required",
+              "under_review",
+              "approved",
+              "rejected",
+              "expired",
+              "unknown"
+            ],
+            "title": "Kyc Status",
+            "type": "string"
+          },
+          "verification_token": {
+            "description": "The hosted-verification session token, not a Perflo access token.",
+            "title": "Verification Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kyc_status",
+          "kyc_raw_status",
+          "verification_token",
+          "applicant_id",
+          "action"
+        ],
+        "title": "CardKycSessionView",
+        "type": "object"
+      },
+      "CardKycView": {
+        "additionalProperties": false,
+        "description": "The customer's card-verification status and issuance eligibility.",
+        "properties": {
+          "can_issue_card": {
+            "description": "Whether the customer can issue a card in the current verification state.",
+            "title": "Can Issue Card",
+            "type": "boolean"
+          },
+          "raw_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The status string as stated; null when none was stated.",
+            "title": "Raw Status"
+          },
+          "status": {
+            "description": "The normalized card-verification status.",
+            "enum": [
+              "not_started",
+              "in_progress",
+              "action_required",
+              "under_review",
+              "approved",
+              "rejected",
+              "expired",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "raw_status",
+          "can_issue_card"
+        ],
+        "title": "CardKycView",
+        "type": "object"
+      },
+      "CardNicknameUpdate": {
+        "additionalProperties": false,
+        "description": "The request that changes or clears a card's private label.",
+        "properties": {
+          "nickname": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The new private label, trimmed and at most 80 characters; null or a blank value clears it.",
+            "title": "Nickname"
+          }
+        },
+        "required": [
+          "nickname"
+        ],
+        "title": "CardNicknameUpdate",
         "type": "object"
       },
       "CardTransactionPage": {
@@ -1218,6 +1575,86 @@
           "created_at"
         ],
         "title": "CardView",
+        "type": "object"
+      },
+      "CardWithdrawalView": {
+        "additionalProperties": false,
+        "description": "One withdrawal from the customer's card account.",
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/NonNegativeMoney",
+            "description": "The withdrawal's value in United States dollars."
+          },
+          "asset": {
+            "description": "The withdrawn asset, passed through unchanged.",
+            "title": "Asset",
+            "type": "string"
+          },
+          "card_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The card identifier; null when no current card resolves it.",
+            "title": "Card Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the withdrawal completed; null while completion is unstated.",
+            "title": "Completed At"
+          },
+          "id": {
+            "description": "The identifier for the withdrawal.",
+            "title": "Id",
+            "type": "string"
+          },
+          "requested_at": {
+            "description": "When the withdrawal was requested.",
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "status": {
+            "description": "The withdrawal status, passed through unchanged. The set of values is open, so branch on the ones a client acts on and carry the rest through.",
+            "title": "Status",
+            "type": "string"
+          },
+          "tx_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The transaction hash; null until one is stated.",
+            "title": "Tx Hash"
+          }
+        },
+        "required": [
+          "id",
+          "card_id",
+          "asset",
+          "amount",
+          "status",
+          "tx_hash",
+          "requested_at",
+          "completed_at"
+        ],
+        "title": "CardWithdrawalView",
         "type": "object"
       },
       "CliDevice": {
@@ -6800,6 +7237,892 @@
         ]
       }
     },
+    "/v1/card-account": {
+      "get": {
+        "description": "Reads the customer's card-account profile, verification state, current deposit balance and lifetime deposited total. Admits a customer token and answers synchronously.",
+        "operationId": "card_account",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardAccountView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Read the card account",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
+    "/v1/card-account/deposit-address": {
+      "get": {
+        "description": "Reads the customer's card-account funding address, accepted assets and minimum amount. Admits a customer token and answers synchronously. An optional card identifier scopes the destination to that card. Either way, the response's own card identifier names the card the destination belongs to.",
+        "operationId": "card_deposit_address",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "card_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 36,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Card Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDepositAddressView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Read the card funding address",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
+    "/v1/card-account/deposits": {
+      "get": {
+        "description": "Lists the customer's card-account deposits and total credited amount. Admits a customer token and answers synchronously. An optional card identifier scopes the result to that card. Either way, the response's own card identifier names the card the deposits and total belong to.",
+        "operationId": "card_deposits",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "card_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 36,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Card Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDepositListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List card-account deposits",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
+    "/v1/card-account/kyc": {
+      "get": {
+        "description": "Reads the customer's normalized card-verification status, its stated value and whether a card can be issued. Admits a customer token and answers synchronously.",
+        "operationId": "card_kyc_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardKycView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Read card verification",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
+    "/v1/card-account/kyc-sessions": {
+      "post": {
+        "description": "Starts a hosted card-verification session and answers with the normalized status, the verification token, the applicant identifier and the action to open. Admits a customer token and answers synchronously.",
+        "operationId": "create_card_kyc_session",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardKycSessionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Start card verification",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
+    "/v1/card-account/withdrawals": {
+      "get": {
+        "description": "Lists the customer's card-account withdrawals. Admits a customer token and answers synchronously. An optional card identifier scopes the result to that card.",
+        "operationId": "card_withdrawals",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "card_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 36,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Card Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CardWithdrawalView"
+                  },
+                  "title": "Response Card Withdrawals",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List card-account withdrawals",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
     "/v1/cards": {
       "get": {
         "description": "Lists the customer's cards. Admits a customer token and answers synchronously. A card with a local write in flight keeps its in-flight status rather than being overwritten by a stale read.",
@@ -7120,6 +8443,310 @@
           }
         ],
         "summary": "Create a card",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
+    "/v1/cards/{card_id}": {
+      "get": {
+        "description": "Reads one of the customer's cards by its card identifier. Admits a customer token and answers synchronously. A card with a write in flight answers from its stored state so a read cannot overwrite that state.",
+        "operationId": "card",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "title": "Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Read a card",
+        "tags": [
+          "Cards"
+        ]
+      },
+      "patch": {
+        "description": "Changes or clears the customer's private label for one card. Admits a customer token and answers synchronously. Null or a blank value clears the label.",
+        "operationId": "set_card_nickname",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "title": "Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardNicknameUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Change a card label",
         "tags": [
           "Cards"
         ]

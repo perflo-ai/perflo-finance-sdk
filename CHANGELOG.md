@@ -4,6 +4,42 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+- Amount strings are spelled the same way everywhere, on every operation that
+  carries one, including operations that existed before. An amount is written
+  out in full rather than in exponent notation, so `1E-7` reads as `0.0000001`.
+  An amount answered from a stored record — a mandate cap, a remaining
+  allowance, a card balance, a purchase price, a withdrawal amount — reads at
+  its own scale, with the places the record adds dropped, so
+  `12.500000000000000000` reads as `12.5`; an amount Perflo states in the same
+  request keeps the digits it was stated with, so `12.50` stays `12.50`. The
+  one exception is a spelling long enough to be padding rather than an amount:
+  writing an amount out in full is bounded, so a value carrying more redundant
+  zeros than that bound admits reads at its own scale instead. The bound is
+  wide enough that no amount inside the published limit reaches it. A
+  serialized amount string on an existing operation can therefore change byte
+  for byte. The values are unchanged; parse them as decimals and nothing moves.
+  That published limit binds on what you send as well: an amount carries at
+  most 20 digits before the decimal point and at most 18 after it — 38 in total
+  at the full-scale corner — and one carrying more is refused with `422` rather
+  than accepted and rounded when it is stored. The limit counts the value
+  rather than the spelling it is written in, so redundant trailing zeros carry
+  nothing and are ignored: `1.000000000000000000000` is one digit and no
+  decimal places (breaking)
+- Added synchronous card-account operations for reading one card, changing or
+  clearing its private label, reading the card profile and KYC state, starting a
+  hosted KYC session, reading the deposit address, and listing deposits and
+  withdrawals. `cardWithdrawals` answers a bare array; `cardDeposits` answers an
+  object carrying the rows, their credited total, and the `card_id` they belong
+  to. The deposit address states its primary asset as `asset` and is returned in
+  full only to the linked customer. Deposit and withdrawal statuses remain open
+  strings, and the optional `card_id` query on the three scoped reads takes 1 to
+  36 characters (additive)
+- `createCard` trims the private label and bounds it at 80 characters after the
+  trim; a blank label becomes null. This changes an operation that already
+  existed: the label stored for a request carrying surrounding spaces, or a
+  label of nothing but spaces, is no longer what was sent, and the idempotency
+  and confirmation hashes taken over the body move with it, so two spellings
+  that used to replay as two requests now replay as one (breaking)
 - Renamed `BeneficiaryCountry` to `BeneficiaryCountryView` and bound its country
   code to two uppercase ASCII letters and its display name to a non-empty value
   (breaking)
