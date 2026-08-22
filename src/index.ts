@@ -15,3 +15,4 @@ export {
   activity as listActivity,
   services as listServices,
 } from "./generated/index.js";
+export { isAllowedVerificationUrl } from "./verification-url.js";

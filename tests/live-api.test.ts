@@ -1,9 +1,10 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -56,9 +57,12 @@ import {
   createTransfer,
   executeMandate,
   freezeCard,
-  spendProviderGrant,
+  spendBeneficiaryGrant,
   unfreezeCard,
 } from "../src/index.js";
+import verificationUrlCorpus from "../verification-url-corpus.json" with {
+  type: "json",
+};
 
 const execFileAsync = promisify(execFile);
 const changedEnvironment = new Map<string, string | undefined>();
@@ -80,7 +84,7 @@ function operationFixture(
     state: "submitted",
     submission_uncertain: false,
     updated_at: "2026-08-14T10:00:01.000Z",
-    upstream_reference: null,
+    external_reference: null,
     ...overrides,
   };
 }
@@ -120,6 +124,33 @@ function setEnvironment(name: string, value: string): void {
     changedEnvironment.set(name, process.env[name]);
   }
   process.env[name] = value;
+}
+
+function abortAwareSend(
+  observe?: (signal: AbortSignal) => void,
+): (dispatch: { signal: AbortSignal }) => Promise<{ error: unknown }> {
+  // The signal can arrive already aborted, and a listener attached to one never fires:
+  // runJournaledMutation starts the submission clock before the journal write, and that
+  // write costs two fsyncs, so a contended disk can spend the whole budget before the
+  // signal is built. Listening without this guard leaves the promise unsettled forever
+  // -- which is what made "bounds a financial dispatch" time out on CI while every
+  // sibling finished in milliseconds. Real fetch already rejects on a pre-aborted
+  // signal; only a hand-written double has to say so.
+  return async ({ signal }) => {
+    observe?.(signal);
+    if (signal.aborted) {
+      return { error: signal.reason };
+    }
+    return await new Promise((resolveResult) => {
+      signal.addEventListener(
+        "abort",
+        () => resolveResult({ error: signal.reason }),
+        {
+          once: true,
+        },
+      );
+    });
+  };
 }
 
 afterEach(() => {
@@ -332,9 +363,9 @@ describe("live API exercise safety", () => {
         expires_at: null,
         kind: "kyc_session",
         poll_after_ms: null,
-        url: "https://evil.example.test/kyc",
+        url: "https://127.1/kyc",
       }),
-    ).toMatch(/untrusted/);
+    ).toMatch(/allowed URL policy/);
     expect(
       requireKycAction({
         expires_at: "2020-01-01T00:00:00.000Z",
@@ -356,7 +387,7 @@ describe("live API exercise safety", () => {
         expires_at: null,
         kind: "kyc_session",
         poll_after_ms: null,
-        url: "https://app.perflo.ai/kyc/fixture",
+        url: "https://verify.identity.example/kyc/fixture",
       }),
     ).toBeUndefined();
     expect(
@@ -367,6 +398,38 @@ describe("live API exercise safety", () => {
         url: "https://app.perflo.ai/cards/fixture",
       }),
     ).toMatch(/expired/);
+  });
+
+  // One corpus for the API boundary, the SDK export and the browser copy, and
+  // this suite proves the exercise applies it. Adding a case to a single suite
+  // is what let three separate divergences reach review.
+  //
+  // One case each way rather than the whole corpus: verification-url.test.ts runs
+  // every case through the same function this exercise calls, so what is left to
+  // prove here is that the exercise consults the rule at all. The first entry of
+  // each list is that representative, so keep `reject[0]` a plainly shaped URL:
+  // the exercise checks the action's shape before it reaches the policy, and a
+  // first reject that is empty or not URL-shaped would fail here as a missing
+  // action rather than as a refused one. Every accept entry is an HTTPS URL by
+  // construction, so `reject[0]` is the only entry that can break this suite.
+  const kycAction = (url: string) =>
+    requireKycAction({
+      expires_at: null,
+      kind: "kyc_session",
+      poll_after_ms: null,
+      url,
+    });
+
+  it.each(
+    verificationUrlCorpus.accept.slice(0, 1),
+  )("accepts a KYC URL inside the allowed policy: %s", (url) => {
+    expect(kycAction(url)).toBeUndefined();
+  });
+
+  it.each(
+    verificationUrlCorpus.reject.slice(0, 1),
+  )("rejects a KYC URL outside the allowed policy: %s", (url) => {
+    expect(kycAction(url)).toMatch(/allowed URL policy/);
   });
 
   it("does not accept a transfer quote for a different request", async () => {
@@ -496,8 +559,8 @@ describe("live API exercise safety", () => {
     const body = { amount: "10.00" };
     const confirmation = { beneficiary_id: "beneficiary-1", ...body };
     const entry = createJournalEntry(
-      "provider_grant.spend",
-      mutationPath("provider_grant.spend", "grant-1"),
+      "beneficiary_grant.spend",
+      mutationPath("beneficiary_grant.spend", "grant-1"),
       body,
       confirmation,
     );
@@ -507,7 +570,7 @@ describe("live API exercise safety", () => {
       body,
       confirmation_payload: confirmation,
       method: "POST",
-      path: "/v1/mandates/provider-grants/grant-1/payments",
+      path: "/v1/mandates/beneficiary-grants/grant-1/payments",
     });
     expect(() =>
       requireMatchingOperation(
@@ -520,7 +583,7 @@ describe("live API exercise safety", () => {
         entry,
         operationFixture({
           created_at: "2026-08-14T09:54:00.000Z",
-          kind: "provider_grant_payment",
+          kind: "beneficiary_grant_payment",
           state: "succeeded",
           updated_at: "2026-08-14T09:54:00.000Z",
         }) as never,
@@ -531,7 +594,7 @@ describe("live API exercise safety", () => {
         entry,
         operationFixture({
           created_at: "2026-08-14T09:59:00.000Z",
-          kind: "provider_grant_payment",
+          kind: "beneficiary_grant_payment",
           state: "succeeded",
           updated_at: "2026-08-14T09:59:00.000Z",
         }) as never,
@@ -609,6 +672,7 @@ describe("live API exercise safety", () => {
     const journal: Journal = { context, entries: [], version: 2 };
     try {
       const startedAt = Date.now();
+      const send = vi.fn(abortAwareSend());
       await runJournaledMutation({
         action: "beneficiary.create",
         body: { name: "fixture" },
@@ -619,16 +683,63 @@ describe("live API exercise safety", () => {
         label: "beneficiary create",
         operationTimeoutMs: 30,
         path: mutationPath("beneficiary.create"),
-        send: async ({ signal }) =>
-          await new Promise((resolveResult) => {
-            signal.addEventListener(
-              "abort",
-              () => resolveResult({ error: signal.reason }),
-              { once: true },
-            );
-          }),
+        send,
       });
+      // Exactly once, on both branches. A journaled financial write that silently
+      // dispatched twice would satisfy every other assertion here.
+      expect(send).toHaveBeenCalledTimes(1);
       expect(Date.now() - startedAt).toBeLessThan(1000);
+      expect(journal.entries[0]).toMatchObject({
+        status: "unresolved",
+        submission_started_at: expect.any(String),
+      });
+      const persisted = JSON.parse(await readFile(journalPath, "utf8"));
+      expect(persisted.entries[0].status).toBe("unresolved");
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("leaves a dispatch unresolved when the budget is gone before submission", async () => {
+    // The "bounds a financial dispatch" sibling reaches this branch only when the
+    // journal's two fsyncs happen to outlast its 30 ms budget, which is a property of
+    // the disk rather than of the test -- it held on CI and never locally. A zero budget
+    // makes the same branch certain: the deadline has already passed by the time
+    // runJournaledMutation builds the signal, so send is handed one that is already
+    // aborted rather than one that aborts later. Zero is a test-only lever; the CLI
+    // validates PERFLO_LIVE_OPERATION_TIMEOUT_MS at 1 or above, and production reaches
+    // this same state through elapsed time on a legal budget.
+    const directory = await mkdtemp(
+      join(tmpdir(), "perflo-live-spent-budget-"),
+    );
+    const journalPath = join(directory, "journal.json");
+    const context: JournalContext = {
+      api_origin: "https://api-gateway.perflo.ai",
+      customer_id: "customer-1",
+      subject: "subject-1",
+    };
+    const journal: Journal = { context, entries: [], version: 2 };
+    try {
+      let signalWasAlreadyAborted: boolean | undefined;
+      const send = vi.fn(
+        abortAwareSend((signal) => {
+          signalWasAlreadyAborted = signal.aborted;
+        }),
+      );
+      await runJournaledMutation({
+        action: "beneficiary.create",
+        body: { name: "fixture" },
+        client: createPerfloClient({ token: "customer-token" }),
+        confirm: async () => undefined,
+        journal,
+        journalPath,
+        label: "beneficiary create",
+        operationTimeoutMs: 0,
+        path: mutationPath("beneficiary.create"),
+        send,
+      });
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(signalWasAlreadyAborted).toBe(true);
       expect(journal.entries[0]).toMatchObject({
         status: "unresolved",
         submission_started_at: expect.any(String),
@@ -1061,9 +1172,9 @@ describe("live API exercise safety", () => {
           }),
       ],
       [
-        mutationPath("provider_grant.spend", "grant-1"),
+        mutationPath("beneficiary_grant.spend", "grant-1"),
         () =>
-          spendProviderGrant({
+          spendBeneficiaryGrant({
             body: {} as never,
             client,
             headers,
@@ -1339,6 +1450,135 @@ describe("live API exercise safety", () => {
       ),
     });
   });
+
+  it("prints the KYC URL from a successful live command", async () => {
+    const capabilities = {
+      ...capabilitiesFixture(),
+      kyc_session: true,
+    };
+    const verificationUrl =
+      "https://verify.identity.example/session/customer-1";
+    const server = createServer((request, response) => {
+      const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+      const key = `${request.method ?? "GET"} ${path}`;
+      const bodies: Record<string, unknown> = {
+        "GET /cli/devices": {
+          data: { devices: [] },
+          success: true,
+        },
+        "GET /v1/identity": {
+          actor_type: "customer",
+          client_id: null,
+          idempotency_replay_window_seconds: 86_400,
+          scopes: [],
+          server_time: "2026-08-20T10:00:00.000Z",
+          subject: "did:privy:customer-1",
+          wallet: null,
+        },
+        "GET /v1/onboarding": {
+          capabilities,
+          customer: {
+            created_at: "2026-08-20T09:00:00.000Z",
+            email: "owner@example.com",
+            id: "customer-1",
+            locale: "en",
+            status: "active",
+          },
+          kyc_session_available: true,
+          perflo_account_identifier: "account-1",
+          perflo_connection: "connected",
+        },
+        "GET /v1/operations": [],
+        "GET /v1/public-config": {
+          app_mark: "P",
+          app_name: "Perflo",
+          app_name_ar: null,
+        },
+        "GET /v1/webhook-subscriptions": [],
+        "POST /v1/kyc/sessions": {
+          expires_at: null,
+          kind: "kyc_session",
+          poll_after_ms: null,
+          url: verificationUrl,
+        },
+      };
+      const body = bodies[key];
+      response.writeHead(body === undefined ? 404 : 200, {
+        "Content-Type": "application/json",
+      });
+      response.end(
+        JSON.stringify(
+          body ?? {
+            code: "not_found",
+            detail: `Unexpected test request ${key}`,
+            status: 404,
+          },
+        ),
+      );
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("test server did not expose a port");
+    }
+    const script = resolve("scripts/live-api.ts");
+    const bootstrap = `
+        Object.defineProperty(process.stdin, "isTTY", { value: true });
+        Object.defineProperty(process.stdout, "isTTY", { value: true });
+        process.argv = [process.execPath, ${JSON.stringify(script)}, "--kyc-session"];
+        await import(${JSON.stringify(pathToFileURL(script).href)});
+      `;
+    const child = spawn(
+      process.execPath,
+      ["--input-type=module", "--eval", bootstrap],
+      {
+        cwd: resolve("."),
+        env: {
+          ...process.env,
+          NO_COLOR: "1",
+          PERFLO_API_BASE_URL: `http://127.0.0.1:${address.port}`,
+          PERFLO_CONFIRMED_ACCOUNT_EMAIL: "owner@example.com",
+          PERFLO_CUSTOMER_TOKEN: "customer-token",
+          PERFLO_LIVE_REQUEST_TIMEOUT_MS: "2000",
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+    const stdout: Array<Buffer> = [];
+    const stderr: Array<Buffer> = [];
+    let confirmationSent = false;
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout.push(chunk);
+      if (
+        !confirmationSent &&
+        Buffer.concat(stdout).includes("Type KYC to continue:")
+      ) {
+        confirmationSent = true;
+        child.stdin.write("KYC\n");
+      }
+    });
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+
+    try {
+      const [exitCode] = (await once(child, "close")) as [number];
+      const output = Buffer.concat(stdout)
+        .toString("utf8")
+        .replaceAll("\r\n", "\n")
+        .replaceAll("\r", "\n");
+      expect(exitCode, output).toBe(0);
+      expect(Buffer.concat(stderr).toString("utf8")).toBe("");
+      expect(output).toContain(
+        `\nOpen the KYC URL in your browser:\n${verificationUrl}\n`,
+      );
+      expect(output).not.toContain("one-time KYC");
+    } finally {
+      child.kill();
+      server.closeAllConnections();
+      server.close();
+      await once(server, "close");
+    }
+  }, 15_000);
 
   it("keeps live credentials out of SDK preparation commands", async () => {
     const packageJson = JSON.parse(await readFile("package.json", "utf8"));
