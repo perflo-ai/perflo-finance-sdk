@@ -62,7 +62,7 @@ Customer access tokens never trigger the agent refresh route. Use the generated 
 
 Call `client.refreshAgentToken()` to refresh explicitly. The generated `refreshAgentToken({ client })` operation remains available.
 
-If `token` is a callback that resolves to a `pfa_` token, the SDK resolves it for the original request and again for the retry. It validates the refresh response but does not replace or pin the callback's value. The credential-store owner remains authoritative. Concurrent `401` responses can each refresh because the gateway re-stamp is idempotent and returns the same token value.
+If `token` is a callback that resolves to a `pfa_` token, the SDK resolves it for the original request and again for the retry. It validates the refresh response but does not replace or pin the callback's value. The credential-store owner remains authoritative. Concurrent `401` responses can each refresh because the token is never rotated and every refresh returns the same value.
 
 ## Protect financial mutations
 

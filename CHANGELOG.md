@@ -4,6 +4,16 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+- Renamed `BeneficiaryCountry` to `BeneficiaryCountryView` and bound its country
+  code to two uppercase ASCII letters and its display name to a non-empty value
+  (breaking)
+- `BeneficiaryCreate.country`, `BeneficiaryCreate.currency`, and the `country`
+  query parameter of `beneficiarySchemas` now require ASCII letters: a two- or
+  three-character value that is not ASCII-alphabetic is refused with `422`
+  (breaking)
+- `POST /v1/mandates/{mandate_id}/executions` now reports a mandate from a
+  previous Perflo connection as `409 perflo_connection_superseded` instead of
+  `403 forbidden` (breaking)
 - Added `beneficiaryAddressCountries`, `beneficiaryByNickname`, and
   `renameBeneficiary` for the synchronous beneficiary metadata routes. Rename
   trims the label, accepts `null` or blank input to clear it, and reports

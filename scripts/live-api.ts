@@ -15,7 +15,7 @@ import { pathToFileURL } from "node:url";
 import {
   accounts,
   activity,
-  type BeneficiaryCountry,
+  type BeneficiaryCountryView,
   type BeneficiaryCreate,
   type BeneficiaryGrantPaymentCreate,
   beneficiaries,
@@ -2166,7 +2166,7 @@ async function runReadSweep(
     record("SKIP", "beneficiary detail", "no beneficiary returned");
   }
 
-  const firstCountry = countryRows?.[0] as BeneficiaryCountry | undefined;
+  const firstCountry = countryRows?.[0] as BeneficiaryCountryView | undefined;
   if (firstCountry) {
     detailChecks.push(() =>
       check(

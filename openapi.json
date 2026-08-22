@@ -397,17 +397,21 @@
         "title": "BankDetails",
         "type": "object"
       },
-      "BeneficiaryCountry": {
+      "BeneficiaryCountryView": {
         "additionalProperties": false,
         "description": "A payout country accepted for new beneficiaries.",
         "properties": {
           "code": {
             "description": "The ISO 3166-1 alpha-2 country code.",
+            "maxLength": 2,
+            "minLength": 2,
+            "pattern": "^[A-Z]{2}$",
             "title": "Code",
             "type": "string"
           },
           "name": {
             "description": "The country's display name.",
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           }
@@ -416,7 +420,7 @@
           "code",
           "name"
         ],
-        "title": "BeneficiaryCountry",
+        "title": "BeneficiaryCountryView",
         "type": "object"
       },
       "BeneficiaryCreate": {
@@ -427,6 +431,7 @@
             "description": "The ISO 3166-1 alpha-2 payout country, which selects the rail together with currency and payout_schema_id.",
             "maxLength": 2,
             "minLength": 2,
+            "pattern": "^[A-Za-z]{2}$",
             "title": "Country",
             "type": "string"
           },
@@ -434,6 +439,7 @@
             "description": "The ISO 4217 alphabetic payout currency.",
             "maxLength": 3,
             "minLength": 3,
+            "pattern": "^[A-Za-z]{3}$",
             "title": "Currency",
             "type": "string"
           },
@@ -6204,7 +6210,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/BeneficiaryCountry"
+                    "$ref": "#/components/schemas/BeneficiaryCountryView"
                   },
                   "title": "Response Beneficiary Countries",
                   "type": "array"
@@ -6347,6 +6353,7 @@
             "schema": {
               "maxLength": 2,
               "minLength": 2,
+              "pattern": "^[A-Za-z]{2}$",
               "title": "Country",
               "type": "string"
             }
