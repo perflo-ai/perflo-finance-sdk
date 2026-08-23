@@ -1577,6 +1577,37 @@
         "title": "CardView",
         "type": "object"
       },
+      "CardWithdrawalCreate": {
+        "additionalProperties": false,
+        "description": "A request to withdraw funds from the customer's card account.",
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money",
+            "description": "The amount to withdraw in United States dollars. It must be exactly representable in whole cents and must be no more than 9007199254740991 cents."
+          },
+          "asset": {
+            "description": "The asset to withdraw, selected from accepted_assets on the card deposit address.",
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Asset",
+            "type": "string"
+          },
+          "card_id": {
+            "description": "The customer's own card identifier.",
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Card Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "amount",
+          "asset"
+        ],
+        "title": "CardWithdrawalCreate",
+        "type": "object"
+      },
       "CardWithdrawalView": {
         "additionalProperties": false,
         "description": "One withdrawal from the customer's card account.",
@@ -2558,6 +2589,7 @@
               "card.unfreeze",
               "card.close",
               "card.reveal",
+              "card_withdrawal.create",
               "purchase.create",
               "spending_withdrawal.create"
             ],
@@ -3451,6 +3483,7 @@
               "card_create",
               "card_freeze",
               "card_unfreeze",
+              "card_withdrawal",
               "mandate_create",
               "mandate_revoke",
               "mandate_revoke_all",
@@ -8121,6 +8154,190 @@
         "tags": [
           "Cards"
         ]
+      },
+      "post": {
+        "description": "Records an idempotent card-account withdrawal and answers 202 with the operation that tracks it. Admits a customer token carrying a fresh iat, a Confirmation-Intent-ID naming the confirmed intent for this action, and an Idempotency-Key. A definitively accepted submission rests at submitted and carries the withdrawal identifier as external_reference. Read GET /v1/card-account/withdrawals for its status, transaction hash and completion. When card withdrawals are not available, the submission fails with card_withdrawal_unavailable. The Idempotency-Key header binds for at least the replay window published by GET /v1/identity. Inside that guaranteed window an equal replay returns the same operation with Idempotent-Replayed set to true. A client with an unresolved response must stop before the window ends and reconcile operation history rather than retry later. A transport-uncertain write leaves the operation indeterminate and is never repeated.",
+        "operationId": "create_card_withdrawal",
+        "parameters": [
+          {
+            "description": "One-use, transaction-bound confirmation.",
+            "in": "header",
+            "name": "Confirmation-Intent-ID",
+            "required": true,
+            "schema": {
+              "description": "One-use, transaction-bound confirmation.",
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Confirmation-Intent-Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unique key for one canonical mutation request.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique key for one canonical mutation request.",
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardWithdrawalCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Sent with the literal value true only when this response replays a previously accepted request under the same idempotency key. Absent on a first acceptance; never sent as false.",
+                "schema": {
+                  "enum": [
+                    "true"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Withdraw card-account funds",
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/v1/cards": {
@@ -12493,7 +12710,7 @@
     },
     "/v1/operations": {
       "get": {
-        "description": "Lists the customer's own operations, unsettled work first and then newest first, truncated to limit. Admits a customer token and answers synchronously from local state without a remote read.",
+        "description": "Lists the customer's own operations, unsettled work first and then newest first, truncated to limit. A card-account withdrawal rests at submitted and ranks with the settled work, because the card-account withdrawal list carries what happens to it next. Admits a customer token and answers synchronously from local state without a remote read.",
         "operationId": "list_operations",
         "parameters": [
           {

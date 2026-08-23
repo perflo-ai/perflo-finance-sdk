@@ -4,6 +4,21 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+- Added `createCardWithdrawal` for `POST /v1/card-account/withdrawals`.
+  It takes the customer card ID, a United States dollar amount, and an asset
+  from the deposit address's `accepted_assets`. The amount must be exactly
+  representable in whole cents and must be no more than `9007199254740991`
+  cents. How it is spelled does not change what is accepted. Repeat the same
+  amount spelling under the same idempotency key. The exponent spelling
+  `1.025E+1` canonicalizes to plain `10.25`, while the trailing-zero spelling
+  `10.250` remains distinct from `10.25`. It uses the new
+  `card_withdrawal.create` confirmation action and `card_withdrawal` operation
+  kind. A definitively accepted operation rests at `submitted` and carries the
+  withdrawal ID as `external_reference`; use `cardWithdrawals` to read its
+  status, transaction hash, and completion. The route answers `202` whether or
+  not card withdrawals are available: when they are not, the operation reaches
+  `failed` with `failure_code: "card_withdrawal_unavailable"`, a definitive
+  refusal. Branch on `failure_code`, not on the response status (additive)
 - Amount strings are spelled the same way everywhere, on every operation that
   carries one, including operations that existed before. An amount is written
   out in full rather than in exponent notation, so `1E-7` reads as `0.0000001`.

@@ -108,7 +108,7 @@ describe("SDK reference generator", () => {
       Accounts: 2,
       Activity: 1,
       Beneficiaries: 8,
-      Cards: 15,
+      Cards: 16,
       Identity: 3,
       KYC: 2,
       Mandates: 13,
@@ -121,10 +121,10 @@ describe("SDK reference generator", () => {
       Webhooks: 3,
     };
 
-    expect(rows).toHaveLength(74);
-    expect(new Set(functionNames).size).toBe(74);
+    expect(rows).toHaveLength(75);
+    expect(new Set(functionNames).size).toBe(75);
     expect(page.match(/^### /gmu)).toHaveLength(14);
-    expect(result.stdout).toContain("74 operations across 14 domains");
+    expect(result.stdout).toContain("75 operations across 14 domains");
     expect(
       page.startsWith(`<p>Before the generated region.</p>\n${startMarker}\n`),
     ).toBe(true);
@@ -177,11 +177,17 @@ describe("SDK reference generator", () => {
     expect(operationRow(page, "createPurchase")).toContain(
       "| `body` (required)<br />`headers` (required) | Bearer |",
     );
+    expect(operationRow(page, "createCardWithdrawal")).toContain(
+      "| `body` (required)<br />`headers` (required) | Bearer |",
+    );
     expect(operationRow(page, "executeMandate")).toContain(
       "| `body` (required)<br />`path` (required)<br />`headers` (required) | Bearer |",
     );
     expect(operationRow(page, "createPurchase")).toContain(
       "`CreatePurchaseData`<br />`CreatePurchaseResponse` / `CreatePurchaseResponses`<br />`CreatePurchaseError` / `CreatePurchaseErrors`",
+    );
+    expect(operationRow(page, "createCardWithdrawal")).toContain(
+      "`CreateCardWithdrawalData`<br />`CreateCardWithdrawalResponse` / `CreateCardWithdrawalResponses`<br />`CreateCardWithdrawalError` / `CreateCardWithdrawalErrors`",
     );
   });
 
@@ -208,7 +214,7 @@ describe("SDK reference generator", () => {
     );
     expect(
       operationRows(page).filter((row) => row.includes("| Bearer |")),
-    ).toHaveLength(68);
+    ).toHaveLength(69);
   });
 
   it("escapes MDX-sensitive OpenAPI text", async () => {
