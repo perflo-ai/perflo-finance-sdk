@@ -176,6 +176,18 @@ function errorFields<T>(error: unknown): PollFields<T> {
   return { data: undefined, error };
 }
 
+function setControlErrorLastValue<T>(
+  error: PollAbortedError<T> | PollDeadlineError<T>,
+  lastValue: T,
+) {
+  Object.defineProperty(error, "lastValue", {
+    configurable: true,
+    enumerable: true,
+    value: lastValue,
+    writable: true,
+  });
+}
+
 export async function pollUntil<T>(options: {
   poll: (signal: AbortSignal) => Promise<PollFields<T>>;
   shouldStop: (value: T) => boolean;
@@ -276,16 +288,23 @@ export async function pollUntil<T>(options: {
       if (outcome.kind === "control") {
         return errorFields(outcome.error);
       }
+      if (
+        outcome.kind === "result" &&
+        outcome.result.error === undefined &&
+        options.shouldStop(outcome.result.data as T)
+      ) {
+        return outcome.result;
+      }
       if (controlError !== undefined) {
+        if (outcome.kind === "result" && outcome.result.error === undefined) {
+          setControlErrorLastValue(controlError, outcome.result.data as T);
+        }
         return errorFields(controlError);
       }
       if (outcome.kind === "rejection") {
         throw outcome.error;
       }
       if (outcome.result.error !== undefined) {
-        return outcome.result;
-      }
-      if (options.shouldStop(outcome.result.data as T)) {
         return outcome.result;
       }
 

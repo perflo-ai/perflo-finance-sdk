@@ -423,6 +423,66 @@ describe("pollUntil", () => {
     expectNoHelperWork(controller.signal, childSignal ? [childSignal] : []);
   });
 
+  it("returns a terminal read that wins a same-turn cancellation race", async () => {
+    const controller = new AbortController();
+    const reason = "caller stopped";
+    const terminal = pollSuccess(purchase("completed"));
+    let childSignal: AbortSignal | undefined;
+    const poll = vi.fn((signal: AbortSignal) => {
+      childSignal = signal;
+      return new Promise<PollFields<PurchaseView>>((resolve) => {
+        resolve(terminal);
+        controller.abort(reason);
+      });
+    });
+
+    const result = await pollUntil({
+      intervalMs: 100,
+      poll,
+      shouldStop: (value) => isTerminalPurchaseStatus(value.status),
+      signal: controller.signal,
+      timeoutMs: 1_000,
+    });
+
+    expect(result).toBe(terminal);
+    expect(childSignal?.aborted).toBe(true);
+    expect(childSignal?.reason).toBe(reason);
+    expectNoHelperWork(controller.signal, childSignal ? [childSignal] : []);
+  });
+
+  it("keeps a non-terminal read that wins a same-turn cancellation race", async () => {
+    const controller = new AbortController();
+    const reason = "caller stopped";
+    const running = purchase("running");
+    const observed = pollSuccess(running);
+    let childSignal: AbortSignal | undefined;
+    const poll = vi.fn((signal: AbortSignal) => {
+      childSignal = signal;
+      return new Promise<PollFields<PurchaseView>>((resolve) => {
+        resolve(observed);
+        controller.abort(reason);
+      });
+    });
+
+    const result = await pollUntil({
+      intervalMs: 100,
+      poll,
+      shouldStop: (value) => isTerminalPurchaseStatus(value.status),
+      signal: controller.signal,
+      timeoutMs: 1_000,
+    });
+
+    expect(poll).toHaveBeenCalledTimes(1);
+    expect(isPollAbortedError<PurchaseView>(result.error)).toBe(true);
+    if (!isPollAbortedError<PurchaseView>(result.error)) {
+      throw new Error("Expected PollAbortedError");
+    }
+    expect(result.error.reason).toBe(reason);
+    expect(result.error.lastValue).toBe(running);
+    expect(childSignal?.aborted).toBe(true);
+    expectNoHelperWork(controller.signal, childSignal ? [childSignal] : []);
+  });
+
   it("aborts interval sleep with the last observed value", async () => {
     const controller = new AbortController();
     const reason = "caller stopped";
