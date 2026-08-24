@@ -15,4 +15,17 @@ export {
   activity as listActivity,
   services as listServices,
 } from "./generated/index.js";
+export {
+  isActionableOperation,
+  isPollAbortedError,
+  isPollDeadlineError,
+  isTerminalPurchaseStatus,
+  PollAbortedError,
+  PollDeadlineError,
+  type PollFields,
+  PURCHASE_STATUS_TERMINALITY,
+  pollOperationUntilActionable,
+  pollPurchaseUntilTerminal,
+  pollUntil,
+} from "./polling.js";
 export { isAllowedVerificationUrl } from "./verification-url.js";

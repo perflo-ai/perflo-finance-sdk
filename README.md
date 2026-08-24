@@ -101,6 +101,42 @@ if (isSubmissionUncertain(result.error)) {
 
 If a problem response sets `submission_uncertain` to `true`, stop replacement writes and reconcile the recorded operation. Read the [TypeScript SDK guide](https://docs.perflo.ai/developers/get-started/typescript-sdk) for the transfer flow and recovery rules. Use the [TypeScript SDK reference](https://docs.perflo.ai/developers/reference/typescript-sdk) for the complete client and generated operation surface.
 
+## Poll purchases and operations
+
+Use the resource-specific polling helpers when a caller needs the next purchase or operation boundary:
+
+```typescript
+import {
+  type PurchaseView,
+  isPollAbortedError,
+  isPollDeadlineError,
+  pollPurchaseUntilTerminal,
+} from "@perflo/finance-sdk";
+
+const cancellation = new AbortController();
+const result = await pollPurchaseUntilTerminal({
+  client,
+  intervalMs: 2_000,
+  purchaseId: "purchase_id",
+  signal: cancellation.signal,
+  timeoutMs: 120_000,
+});
+
+if (isPollDeadlineError<PurchaseView>(result.error)) {
+  console.error(result.error.lastValue, result.error.outcomeMayStillChange);
+} else if (isPollAbortedError<PurchaseView>(result.error)) {
+  console.error("Polling was cancelled", result.error.reason);
+}
+```
+
+`pollPurchaseUntilTerminal` calls `getPurchase` until the exhaustive `PURCHASE_STATUS_TERMINALITY` table classifies the status as terminal. `queued`, `running`, and `settling` continue; every other current purchase status stops. The package also exports the table and `isTerminalPurchaseStatus` so callers can apply the same classification without running the helper.
+
+`pollOperationUntilActionable` calls `getOperation` until the operation needs caller attention or has reached a definitive state. It stops for `requires_action`, `indeterminate`, `succeeded`, `failed`, and `cancelled`. A submitted card withdrawal also stops, while every other submitted operation continues. The helper only reads the operation. It does not open a hosted action or invoke an approval or resolution mutation. Use `isActionableOperation` to apply this rule outside the polling helper.
+
+Both wrappers use the exported `pollUntil<T>` engine and `PollFields<T>` result type. The engine polls immediately, never overlaps reads, waits `intervalMs` after each completed non-terminal read, and measures `timeoutMs` from invocation. Both values must be finite and positive. The caller owns the interval, timeout, and optional cancellation signal. The engine passes a linked child signal to every read so cancellation and the deadline stop interval sleep and in-flight Fetch work.
+
+An ordinary read failure returns unchanged with its `request` and `response` fields. A deadline returns `PollDeadlineError<T>` with `code: "POLL_DEADLINE_EXCEEDED"`, the configured timeout, `outcomeMayStillChange: true`, and the last observed value when one exists. Caller cancellation returns `PollAbortedError<T>` with `code: "POLL_ABORTED"`, the caller's reason, and the last value when one exists. Use `isPollDeadlineError` and `isPollAbortedError` instead of `instanceof` so narrowing works across JavaScript realms. A deadline does not change or infer the resource's `submission_uncertain` field and never proves that a replacement write is safe.
+
 ## Check a verification URL
 
 A `kyc_session` action carries an HTTPS URL to open in the customer's browser. `isAllowedVerificationUrl(value)` decides whether that URL is one a browser may be sent to, and it is the same rule the API enforces on a `kyc_session` action's `url`:

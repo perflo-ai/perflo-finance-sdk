@@ -269,6 +269,7 @@ function createPolicyFetch({
       },
       method: "POST",
       redirect: "manual",
+      signal: request.signal,
     });
 
     let refreshResponse: Response;

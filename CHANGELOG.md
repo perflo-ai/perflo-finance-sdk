@@ -4,6 +4,16 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+- Added `PURCHASE_STATUS_TERMINALITY`, `isTerminalPurchaseStatus`,
+  `isActionableOperation`, `pollUntil`, `pollPurchaseUntilTerminal`, and
+  `pollOperationUntilActionable`. The read-only wrappers poll immediately,
+  never overlap reads, preserve field-style results, and pass caller
+  cancellation and deadlines through in-flight reads and automatic agent-token
+  refresh. `PollDeadlineError` and `PollAbortedError` keep control outcomes
+  distinct and retain the last observed resource when one exists. Submitted
+  card withdrawals are actionable; every other submitted operation continues
+  (additive)
+
 ## 0.1.0-beta.12 - 2026-08-24
 
 - Added `createCardWithdrawal` for `POST /v1/card-account/withdrawals`.
