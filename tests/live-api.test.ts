@@ -92,6 +92,7 @@ function operationFixture(
 function capabilitiesFixture(value = false): Record<string, boolean> {
   return Object.fromEntries(
     [
+      "account_provisioning",
       "accounts",
       "activity",
       "asset_registry",
