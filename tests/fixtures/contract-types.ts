@@ -11,12 +11,23 @@ import {
   type DevicesError,
   getIdentity,
   type IdentityView,
+  isPollAbortedError,
+  isPollDeadlineError,
   listActivity,
   listServices,
   type Money,
+  type OperationView,
+  type PollAbortedError,
+  type PollDeadlineError,
   type PollDeviceError,
+  type PollFields,
   type ProblemDetails,
+  type PURCHASE_STATUS_TERMINALITY,
   type PurchaseCreate,
+  type PurchaseView,
+  pollOperationUntilActionable,
+  pollPurchaseUntilTerminal,
+  pollUntil,
   type RefreshAgentTokenResponse,
   type RefreshTokenError,
   type ResolveOperationApprovalData,
@@ -70,6 +81,24 @@ export type RefreshTokenKeepsBothErrorMediaTypes = Assert<
 >;
 export type RevokeTokenKeepsBothErrorMediaTypes = Assert<
   Equal<RevokeTokenError, CliErrorUnion>
+>;
+export type PurchaseTerminalityCoversEveryStatus = Assert<
+  Equal<keyof typeof PURCHASE_STATUS_TERMINALITY, PurchaseView["status"]>
+>;
+export type QueuedPurchaseStaysNonTerminal = Assert<
+  Equal<(typeof PURCHASE_STATUS_TERMINALITY)["queued"], false>
+>;
+export type SettlingPurchaseStaysNonTerminal = Assert<
+  Equal<(typeof PURCHASE_STATUS_TERMINALITY)["settling"], false>
+>;
+export type CompletedPurchaseStaysTerminal = Assert<
+  Equal<(typeof PURCHASE_STATUS_TERMINALITY)["completed"], true>
+>;
+export type DeadlineCodeStaysLiteral = Assert<
+  Equal<PollDeadlineError["code"], "POLL_DEADLINE_EXCEEDED">
+>;
+export type AbortedCodeStaysLiteral = Assert<
+  Equal<PollAbortedError["code"], "POLL_ABORTED">
 >;
 
 export function narrowMandate(body: CreateMandateData["body"]): string {
@@ -130,6 +159,54 @@ export function narrowDevicePoll(response: CliDevicePollResponse): string {
 }
 
 const client = createPerfloClient();
+
+export const purchasePollingResult = pollPurchaseUntilTerminal({
+  client,
+  intervalMs: 2_000,
+  purchaseId: "purchase_id",
+  timeoutMs: 120_000,
+});
+export type PurchasePollingResultStaysFieldStyle = Assert<
+  Equal<Awaited<typeof purchasePollingResult>, PollFields<PurchaseView>>
+>;
+export const operationPollingResult = pollOperationUntilActionable({
+  client,
+  intervalMs: 2_000,
+  operationId: "operation_id",
+  timeoutMs: 120_000,
+});
+export type OperationPollingResultStaysFieldStyle = Assert<
+  Equal<Awaited<typeof operationPollingResult>, PollFields<OperationView>>
+>;
+export type PurchasePollingSignalStaysOptional = Assert<
+  Equal<
+    Parameters<typeof pollPurchaseUntilTerminal>[0]["signal"],
+    AbortSignal | undefined
+  >
+>;
+
+export function narrowPurchaseDeadline(error: unknown) {
+  if (isPollDeadlineError<PurchaseView>(error)) {
+    return error.lastValue?.status;
+  }
+  return undefined;
+}
+
+export function narrowOperationAbort(error: unknown) {
+  if (isPollAbortedError<OperationView>(error)) {
+    return error.lastValue?.state;
+  }
+  return undefined;
+}
+
+declare const purchaseFields: PollFields<PurchaseView>;
+
+// @ts-expect-error Generic polling requires an explicit stopping predicate.
+pollUntil({
+  intervalMs: 2_000,
+  poll: async () => purchaseFields,
+  timeoutMs: 120_000,
+});
 
 export const refreshAgentTokenResult = client.refreshAgentToken();
 type RefreshHelperResult = Awaited<typeof refreshAgentTokenResult>;

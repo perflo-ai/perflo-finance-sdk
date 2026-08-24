@@ -515,6 +515,46 @@ describe("agent token refresh", () => {
     ]);
   });
 
+  it("propagates an operation abort into automatic refresh", async () => {
+    let refreshStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      refreshStarted = resolve;
+    });
+    let refreshSignal: AbortSignal | undefined;
+    const mocked = mockFetch((request) => {
+      if (new URL(request.url).pathname !== "/v1/agent-tokens/refresh") {
+        return jsonResponse(problemDetails(), 401);
+      }
+      refreshSignal = request.signal;
+      refreshStarted();
+      return new Promise<Response>((_resolve, reject) => {
+        const onAbort = () => reject(request.signal.reason);
+        request.signal.addEventListener("abort", onAbort, { once: true });
+        if (request.signal.aborted) {
+          onAbort();
+        }
+      });
+    });
+    const controller = new AbortController();
+    const reason = new DOMException("poll stopped", "AbortError");
+    const pending = getIdentity({
+      client: createPerfloClient({
+        fetch: mocked.fetch,
+        token: "pfa_expired_token",
+      }),
+      signal: controller.signal,
+    });
+    await started;
+
+    controller.abort(reason);
+    const result = await pending;
+
+    expect(refreshSignal?.aborted).toBe(true);
+    expect(refreshSignal?.reason).toBe(reason);
+    expect(result.error).toMatchObject({ code: "authentication_required" });
+    expect(result.response?.status).toBe(401);
+  });
+
   it("returns the original 401 when the retry also returns 401", async () => {
     const originalResponse = jsonResponse(
       problemDetails({ code: "original_unauthorized" }),
