@@ -219,14 +219,9 @@ export async function pollUntil<T>(options: {
   const controller = new AbortController();
   let controlError: PollAbortedError<T> | PollDeadlineError<T> | undefined;
   let deadlineTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
-  let resolveControl!: (
-    error: PollAbortedError<T> | PollDeadlineError<T>,
-  ) => void;
-  const control = new Promise<PollAbortedError<T> | PollDeadlineError<T>>(
-    (resolve) => {
-      resolveControl = resolve;
-    },
-  );
+  let resolveCurrentControl:
+    | ((error: PollAbortedError<T> | PollDeadlineError<T>) => void)
+    | undefined;
 
   const activateControl = (
     error: PollAbortedError<T> | PollDeadlineError<T>,
@@ -236,7 +231,7 @@ export async function pollUntil<T>(options: {
       return;
     }
     controlError = error;
-    resolveControl(error);
+    resolveCurrentControl?.(error);
     controller.abort(abortReason);
   };
   const onCallerAbort = () =>
@@ -269,21 +264,28 @@ export async function pollUntil<T>(options: {
         return errorFields(controlError);
       }
 
+      const currentControl = new Promise<
+        PollAbortedError<T> | PollDeadlineError<T>
+      >((resolve) => {
+        resolveCurrentControl = resolve;
+      });
       const polled = options.poll(controller.signal);
 
-      const outcome = await Promise.race([
-        polled.then(
-          (result) => {
-            if (result.error === undefined) {
-              hasLastValue = true;
-              lastValue = result.data;
-            }
-            return { kind: "result", result } as const;
-          },
-          (error: unknown) => ({ kind: "rejection", error }) as const,
-        ),
-        control.then((error) => ({ kind: "control", error }) as const),
-      ]);
+      const polledOutcome = polled.then(
+        (result) => {
+          if (result.error === undefined) {
+            hasLastValue = true;
+            lastValue = result.data;
+          }
+          return { kind: "result", result } as const;
+        },
+        (error: unknown) => ({ kind: "rejection", error }) as const,
+      );
+      const controlOutcome = currentControl.then(
+        (error) => ({ kind: "control", error }) as const,
+      );
+      const outcome = await Promise.race([polledOutcome, controlOutcome]);
+      resolveCurrentControl = undefined;
 
       if (outcome.kind === "control") {
         return errorFields(outcome.error);
@@ -311,6 +313,7 @@ export async function pollUntil<T>(options: {
       await waitForInterval(options.intervalMs, controller.signal);
     }
   } finally {
+    resolveCurrentControl = undefined;
     if (deadlineTimer !== undefined) {
       globalThis.clearTimeout(deadlineTimer);
     }
