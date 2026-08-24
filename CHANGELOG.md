@@ -4,6 +4,8 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+## 0.1.0-beta.12 - 2026-08-24
+
 - Added `createCardWithdrawal` for `POST /v1/card-account/withdrawals`.
   It takes the customer card ID, a United States dollar amount, and an asset
   from the deposit address's `accepted_assets`. The amount must be exactly
