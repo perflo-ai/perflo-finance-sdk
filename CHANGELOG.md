@@ -4,6 +4,8 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+## 0.1.0-beta.13 - 2026-08-24
+
 - Added `PURCHASE_STATUS_TERMINALITY`, `isTerminalPurchaseStatus`,
   `isActionableOperation`, `pollUntil`, `pollPurchaseUntilTerminal`, and
   `pollOperationUntilActionable`. The read-only wrappers poll immediately,
