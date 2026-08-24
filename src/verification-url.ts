@@ -29,17 +29,16 @@ function asciiHttpsAuthority(value: string): string | undefined {
 // bracketed authority. `https://[v1.abc]/s` names the host `v1.abc` to one URL
 // parser and no host at all to another.
 /**
- * Whether a value is a verification URL the policy allows: an HTTPS URL that
- * states no credentials and names a host of at least two ASCII labels of
- * letters, digits and inner hyphens, none of them `localhost` and none
- * beginning `xn--`, each label at most 63 characters and the host at most 253,
- * with one trailing dot allowed and a final label that is neither all digits
- * nor `0x` hex; a zero or empty port, a percent sign or bracket in the
- * authority, and a backslash, a space or an ASCII control character anywhere
- * are refused. A non-string value returns `false`. Ownership, name resolution
- * and reachability are not checked. It is the rule a `kyc_session` action's
- * `url` is held to, and it is tested against the corpus the source repository
- * shares with the API.
+ * Whether a value is a verification URL the policy allows: an HTTPS URL with
+ * no credentials and a host of at least two ASCII labels of letters, digits
+ * and inner hyphens, none of them `localhost` and none beginning `xn--`, each
+ * label at most 63 characters and the host at most 253, with one trailing dot
+ * allowed and a final label that is neither all digits nor `0x` hex; a zero or
+ * empty port, a percent sign or bracket in the authority, and a backslash, a
+ * space or an ASCII control character anywhere are refused. A non-string value
+ * returns `false`. Ownership, name resolution and reachability are not
+ * checked. It is the rule a `kyc_session` action's `url` is held to, and it is
+ * tested against the corpus the source repository shares with the API.
  */
 export function isAllowedVerificationUrl(value: unknown): value is string {
   if (

@@ -71,7 +71,7 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
   `beneficiary_nickname_taken` when the label is already carried by another
   beneficiary (additive)
 - Hosted KYC actions can carry the customer-specific HTTPS URL Perflo states.
-  The URL check requires a URL that states no credentials and a host of at least
+  The URL check requires a URL with no credentials and a host of at least
   two ASCII labels of letters, digits and inner hyphens, none of them
   `localhost`, none beginning `xn--`, and a final label that is neither all
   digits nor `0x` hex; it does not verify ownership, name resolution, or

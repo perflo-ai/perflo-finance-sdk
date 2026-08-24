@@ -113,7 +113,7 @@ if (!isAllowedVerificationUrl(action.url)) {
 }
 ```
 
-It returns `true` for an HTTPS URL that states no credentials and names a host of at least two ASCII labels of letters, digits and inner hyphens, none of them `localhost` and none beginning `xn--`, each label at most 63 characters and the host at most 253, with one trailing dot allowed and a final label that is neither all digits nor `0x` hex. A zero or empty port, a percent sign or bracket in the authority, and a backslash, a space or an ASCII control character anywhere are refused. A non-string value returns `false`. Ownership, name resolution, and reachability are not checked.
+It returns `true` for an HTTPS URL with no credentials and a host of at least two ASCII labels of letters, digits and inner hyphens, none of them `localhost` and none beginning `xn--`, each label at most 63 characters and the host at most 253, with one trailing dot allowed and a final label that is neither all digits nor `0x` hex. A zero or empty port, a percent sign or bracket in the authority, and a backslash, a space or an ASCII control character anywhere are refused. A non-string value returns `false`. Ownership, name resolution, and reachability are not checked.
 
 ## Update the contract
 

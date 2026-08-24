@@ -1295,7 +1295,7 @@
             "type": "string"
           },
           "verification_token": {
-            "description": "The hosted-verification session token, not a Perflo access token.",
+            "description": "The credential for one hosted card-verification session. It is not a reusable customer-account access or refresh token. Do not log or persist it.",
             "title": "Verification Token",
             "type": "string"
           }
@@ -2075,7 +2075,7 @@
                 "type": "null"
               }
             ],
-            "description": "Additional error context, as defined by the responder.",
+            "description": "Additional error context, when supplied.",
             "title": "Details"
           },
           "message": {
@@ -2108,7 +2108,7 @@
       },
       "CliErrorResponse": {
         "additionalProperties": true,
-        "description": "A relayed failure envelope, passed through without conversion to problem details.",
+        "description": "A Perflo failure envelope relayed without conversion to problem details.",
         "properties": {
           "code": {
             "anyOf": [
@@ -5126,7 +5126,7 @@
                 }
               }
             },
-            "description": "A validation problem, or a relayed failure."
+            "description": "A validation problem, or a failure Perflo returns."
           },
           "429": {
             "content": {
@@ -5141,7 +5141,7 @@
                 }
               }
             },
-            "description": "An address or session rate limit, or a relayed one. A rate limit applied here answers ProblemDetails; a relayed one keeps its own JSON envelope."
+            "description": "An address or session rate limit, or one Perflo returns. Perflo responses keep their JSON envelope; all other responses use ProblemDetails."
           },
           "default": {
             "content": {
@@ -5156,7 +5156,7 @@
                 }
               }
             },
-            "description": "A problem document, or a relayed failure status, headers and body passed through unchanged."
+            "description": "A problem document, or Perflo's failure status, headers and body relayed unchanged."
           }
         },
         "summary": "Poll Perflo device authentication",
@@ -5203,7 +5203,7 @@
                 }
               }
             },
-            "description": "A validation problem, or a relayed failure."
+            "description": "A validation problem, or a failure Perflo returns."
           },
           "429": {
             "content": {
@@ -5218,7 +5218,7 @@
                 }
               }
             },
-            "description": "An address rate limit, or a relayed one."
+            "description": "An address rate limit, or one Perflo returns."
           },
           "default": {
             "content": {
@@ -5233,7 +5233,7 @@
                 }
               }
             },
-            "description": "A problem document, or a relayed failure status, headers and body passed through unchanged."
+            "description": "A problem document, or Perflo's failure status, headers and body relayed unchanged."
           }
         },
         "summary": "Start Perflo device authentication",
@@ -5270,7 +5270,7 @@
                 }
               }
             },
-            "description": "An authentication problem, or a relayed failure."
+            "description": "An authentication problem, or a failure Perflo returns."
           },
           "422": {
             "content": {
@@ -5285,7 +5285,7 @@
                 }
               }
             },
-            "description": "A validation problem, or a relayed failure."
+            "description": "A validation problem, or a failure Perflo returns."
           },
           "default": {
             "content": {
@@ -5300,7 +5300,7 @@
                 }
               }
             },
-            "description": "A problem document, or a relayed failure status, headers and body passed through unchanged."
+            "description": "A problem document, or Perflo's failure status, headers and body relayed unchanged."
           }
         },
         "security": [
@@ -5352,7 +5352,7 @@
                 }
               }
             },
-            "description": "A validation problem, or a relayed failure."
+            "description": "A validation problem, or a failure Perflo returns."
           },
           "429": {
             "content": {
@@ -5367,7 +5367,7 @@
                 }
               }
             },
-            "description": "An address or session rate limit, or a relayed one. A rate limit applied here answers ProblemDetails; a relayed one keeps its own JSON envelope."
+            "description": "An address or session rate limit, or one Perflo returns. Perflo responses keep their JSON envelope; all other responses use ProblemDetails."
           },
           "default": {
             "content": {
@@ -5382,7 +5382,7 @@
                 }
               }
             },
-            "description": "A problem document, or a relayed failure status, headers and body passed through unchanged."
+            "description": "A problem document, or Perflo's failure status, headers and body relayed unchanged."
           }
         },
         "summary": "Poll a Perflo CLI signing approval",
@@ -5429,7 +5429,7 @@
                 }
               }
             },
-            "description": "An authentication problem, or a relayed failure."
+            "description": "An authentication problem, or a failure Perflo returns."
           },
           "422": {
             "content": {
@@ -5444,7 +5444,7 @@
                 }
               }
             },
-            "description": "A validation problem, or a relayed failure."
+            "description": "A validation problem, or a failure Perflo returns."
           },
           "default": {
             "content": {
@@ -5459,7 +5459,7 @@
                 }
               }
             },
-            "description": "A problem document, or a relayed failure status, headers and body passed through unchanged."
+            "description": "A problem document, or Perflo's failure status, headers and body relayed unchanged."
           }
         },
         "security": [
@@ -5511,7 +5511,7 @@
                 }
               }
             },
-            "description": "A validation problem, or a relayed failure."
+            "description": "A validation problem, or a failure Perflo returns."
           },
           "429": {
             "content": {
@@ -5526,7 +5526,7 @@
                 }
               }
             },
-            "description": "An address rate limit, or a relayed one."
+            "description": "An address rate limit, or one Perflo returns."
           },
           "default": {
             "content": {
@@ -5541,7 +5541,7 @@
                 }
               }
             },
-            "description": "A problem document, or a relayed failure status, headers and body passed through unchanged."
+            "description": "A problem document, or Perflo's failure status, headers and body relayed unchanged."
           }
         },
         "summary": "Refresh a Perflo access token",
@@ -5595,7 +5595,7 @@
                 }
               }
             },
-            "description": "An authentication problem, or a relayed failure."
+            "description": "An authentication problem, or a failure Perflo returns."
           },
           "422": {
             "content": {
@@ -5610,7 +5610,7 @@
                 }
               }
             },
-            "description": "A validation problem, or a relayed failure."
+            "description": "A validation problem, or a failure Perflo returns."
           },
           "default": {
             "content": {
@@ -5625,7 +5625,7 @@
                 }
               }
             },
-            "description": "A problem document, or a relayed failure status, headers and body passed through unchanged."
+            "description": "A problem document, or Perflo's failure status, headers and body relayed unchanged."
           }
         },
         "security": [
