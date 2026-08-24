@@ -1,7 +1,12 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
   "files": {
-    "includes": ["**", "!!dist", "!!openapi.json"]
+    "includes": [
+      "**",
+      "!!dist",
+      "!!openapi.json",
+      "!!verification-url-corpus.json"
+    ]
   },
   "formatter": {
     "enabled": true,

@@ -7,8 +7,8 @@ Use `@perflo/finance-sdk` from Node.js, browsers, or Cloudflare Workers to call 
 Set the release location once in your shell:
 
 ```bash
-sdk_version="v0.1.0-beta.9"
-sdk_archive="perflo-finance-sdk-0.1.0-beta.9.tgz"
+sdk_version="v0.1.0-beta.12"
+sdk_archive="perflo-finance-sdk-0.1.0-beta.12.tgz"
 sdk_releases="https://github.com/perflo-ai/perflo-finance-sdk/releases"
 ```
 
@@ -62,7 +62,7 @@ Customer access tokens never trigger the agent refresh route. Use the generated 
 
 Call `client.refreshAgentToken()` to refresh explicitly. The generated `refreshAgentToken({ client })` operation remains available.
 
-If `token` is a callback that resolves to a `pfa_` token, the SDK resolves it for the original request and again for the retry. It validates the refresh response but does not replace or pin the callback's value. The credential-store owner remains authoritative. Concurrent `401` responses can each refresh because the gateway re-stamp is idempotent and returns the same token value.
+If `token` is a callback that resolves to a `pfa_` token, the SDK resolves it for the original request and again for the retry. It validates the refresh response but does not replace or pin the callback's value. The credential-store owner remains authoritative. Concurrent `401` responses can each refresh because the token is never rotated and every refresh returns the same value.
 
 ## Protect financial mutations
 
@@ -100,6 +100,20 @@ if (isSubmissionUncertain(result.error)) {
 - `problem.code` does not start with `idempotency_`
 
 If a problem response sets `submission_uncertain` to `true`, stop replacement writes and reconcile the recorded operation. Read the [TypeScript SDK guide](https://docs.perflo.ai/developers/get-started/typescript-sdk) for the transfer flow and recovery rules. Use the [TypeScript SDK reference](https://docs.perflo.ai/developers/reference/typescript-sdk) for the complete client and generated operation surface.
+
+## Check a verification URL
+
+A `kyc_session` action carries an HTTPS URL to open in the customer's browser. `isAllowedVerificationUrl(value)` decides whether that URL is one a browser may be sent to, and it is the same rule the API enforces on a `kyc_session` action's `url`:
+
+```typescript
+import { isAllowedVerificationUrl } from "@perflo/finance-sdk";
+
+if (!isAllowedVerificationUrl(action.url)) {
+  // Send the customer to your own verification page instead.
+}
+```
+
+It returns `true` for an HTTPS URL with no credentials and a host of at least two ASCII labels of letters, digits and inner hyphens, none of them `localhost` and none beginning `xn--`, each label at most 63 characters and the host at most 253, with one trailing dot allowed and a final label that is neither all digits nor `0x` hex. A zero or empty port, a percent sign or bracket in the authority, and a backslash, a space or an ASCII control character anywhere are refused. A non-string value returns `false`. Ownership, name resolution, and reachability are not checked.
 
 ## Update the contract
 

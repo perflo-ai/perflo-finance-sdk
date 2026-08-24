@@ -18,6 +18,7 @@
 !/tests/
 !/tsconfig.build.json
 !/tsconfig.json
+!/verification-url-corpus.json
 !/vitest.config.ts
 
 /.agent-state/
