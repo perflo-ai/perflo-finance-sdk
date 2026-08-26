@@ -1,6 +1,62 @@
 {
   "components": {
     "schemas": {
+      "AccountCreate": {
+        "additionalProperties": false,
+        "description": "The complete request to provision one fiat account.",
+        "properties": {
+          "currency": {
+            "description": "The ISO 4217 alphabetic currency code for the requested account, normalized to upper case. Acceptance does not establish eligibility for another customer or currency.",
+            "pattern": "^[A-Za-z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "title": "AccountCreate",
+        "type": "object"
+      },
+      "AccountEndorsementView": {
+        "additionalProperties": false,
+        "description": "The restricted endorsement state for one requested currency.",
+        "properties": {
+          "currency": {
+            "description": "The requested ISO 4217 alphabetic currency code.",
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "in_progress": {
+            "description": "Whether an endorsement is in progress for this currency.",
+            "title": "In Progress",
+            "type": "boolean"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The normalized endorsement phase; null when none is stated.",
+            "title": "Phase"
+          }
+        },
+        "required": [
+          "currency",
+          "in_progress",
+          "phase"
+        ],
+        "title": "AccountEndorsementView",
+        "type": "object"
+      },
       "AccountView": {
         "additionalProperties": false,
         "description": "A fiat deposit account the customer can be paid into.",
@@ -2577,6 +2633,7 @@
           "action": {
             "description": "The sensitive action being confirmed. It must name the same mutation that later spends the intent.",
             "enum": [
+              "account.create",
               "transfer.create",
               "mandate.create",
               "mandate.execute",
@@ -3476,6 +3533,7 @@
           "kind": {
             "description": "Which mutation the operation performs. The vocabulary is closed: every operation carries one of these kinds.",
             "enum": [
+              "account_create",
               "beneficiary_create",
               "beneficiary_grant_payment",
               "beneficiary_grant_revoke",
@@ -3582,10 +3640,15 @@
       },
       "PerfloCapabilitiesView": {
         "additionalProperties": false,
-        "description": "One boolean per surface this deployment can serve.\n\nFalse means the surface is unavailable in this deployment and the matching\nroute answers 503 rather than an empty result.",
+        "description": "One boolean per surface this deployment can serve.\n\nFalse means the surface is unavailable for a new request in this deployment\nrather than an empty result. An idempotent replay of an admitted operation\nremains available while new admission is disabled.",
         "properties": {
+          "account_provisioning": {
+            "description": "Whether this deployment admits deposit-account provisioning.",
+            "title": "Account Provisioning",
+            "type": "boolean"
+          },
           "accounts": {
-            "description": "Whether this deployment can list the customer's deposit accounts.",
+            "description": "Whether this deployment can list the customer's deposit accounts and read endorsement status.",
             "title": "Accounts",
             "type": "boolean"
           },
@@ -3704,6 +3767,7 @@
           "kyc_status",
           "kyc_session",
           "accounts",
+          "account_provisioning",
           "activity",
           "beneficiaries",
           "recipient_metadata",
@@ -5775,6 +5839,343 @@
           }
         ],
         "summary": "List deposit accounts",
+        "tags": [
+          "Accounts"
+        ]
+      },
+      "post": {
+        "description": "Records one customer-requested fiat account and answers 202 with the operation that tracks it. Admits a customer token carrying a fresh iat, a Confirmation-Intent-ID naming the confirmed intent for this action, and an Idempotency-Key. The confirmation action is account.create and binds to the complete normalized request body. An accepted operation can submit provisioning at most once, and only after its durable record is committed. If submission begins but no definitive result is saved, read-only reconciliation looks for exactly one matching account in the requested currency and the write is never resubmitted automatically. Acceptance states no eligibility for another customer or currency. The Idempotency-Key header binds for at least the replay window published by GET /v1/identity. Inside that guaranteed window an equal replay returns the same operation with Idempotent-Replayed set to true. A client with an unresolved response must stop before the window ends and reconcile operation history rather than retry later. A transport-uncertain write leaves the operation indeterminate and is never repeated.",
+        "operationId": "create_account",
+        "parameters": [
+          {
+            "description": "One-use, transaction-bound confirmation.",
+            "in": "header",
+            "name": "Confirmation-Intent-ID",
+            "required": true,
+            "schema": {
+              "description": "One-use, transaction-bound confirmation.",
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Confirmation-Intent-Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unique key for one canonical mutation request.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Unique key for one canonical mutation request.",
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Sent with the literal value true only when this response replays a previously accepted request under the same idempotency key. Absent on a first acceptance; never sent as false.",
+                "schema": {
+                  "enum": [
+                    "true"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Provision a deposit account",
+        "tags": [
+          "Accounts"
+        ]
+      }
+    },
+    "/v1/accounts/endorsement": {
+      "get": {
+        "description": "Returns the endorsement state for one requested fiat currency. Admits a customer token and answers synchronously with only currency, in_progress, and phase. The projection carries no session material, requirements, identifiers, pending records, or hosted URL.",
+        "operationId": "account_endorsement",
+        "parameters": [
+          {
+            "description": "The ISO 4217 alphabetic currency code to inspect.",
+            "in": "query",
+            "name": "currency",
+            "required": true,
+            "schema": {
+              "description": "The ISO 4217 alphabetic currency code to inspect.",
+              "maxLength": 3,
+              "minLength": 3,
+              "pattern": "^[A-Za-z]{3}$",
+              "title": "Currency",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountEndorsementView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Malformed or invalid request semantics"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Action not permitted"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid response"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Capability unavailable"
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Read account endorsement status",
         "tags": [
           "Accounts"
         ]

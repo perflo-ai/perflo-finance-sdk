@@ -307,6 +307,7 @@ const CONFIRMATION_ACTION_FLAGS: Record<
   ConfirmationIntentCreate["action"],
   true
 > = {
+  "account.create": true,
   "beneficiary_grant.revoke": true,
   "beneficiary_grant.spend": true,
   "card.close": true,
@@ -1044,6 +1045,7 @@ const OPERATION_STATES: ReadonlySet<string> = new Set([
 // the union does not name. A hand-written set would drift the day a kind is added and
 // let the new kind through as an unrecognized operation.
 const OPERATION_KIND_FLAGS: Record<OperationView["kind"], true> = {
+  account_create: true,
   beneficiary_create: true,
   beneficiary_grant_payment: true,
   beneficiary_grant_revoke: true,
@@ -1135,6 +1137,7 @@ const PERFLO_CONNECTION_STATES: ReadonlySet<string> = new Set<
 >(["pending", "connected", "reconnect_required", "not_connected"]);
 
 const CAPABILITY_FIELDS = [
+  "account_provisioning",
   "accounts",
   "activity",
   "asset_registry",

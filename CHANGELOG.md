@@ -4,6 +4,19 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+- Added `createAccount` for confirmed idempotent fiat account provisioning and
+  `accountEndorsement` for the restricted endorsement projection. Account
+  provisioning returns a tracked operation. Read-only reconciliation requires
+  exactly one account in the requested currency and never repeats an uncertain
+  write. Check `account_provisioning` before `createAccount`; `accounts` gates
+  account listing and endorsement. The endorsement read returns only `currency`,
+  `in_progress`, and nullable open `phase` (additive)
+- Added `account.create` to `ConfirmationIntentCreate.action` and
+  `account_create` to `OperationView.kind`, and added the required
+  `account_provisioning` capability. Exhaustive consumers of the closed unions
+  and exhaustive `keyof PerfloCapabilitiesView` consumers or callers constructing
+  complete capability objects must handle the new members (breaking)
+
 ## 0.1.0-beta.13 - 2026-08-24
 
 - Added `PURCHASE_STATUS_TERMINALITY`, `isTerminalPurchaseStatus`,

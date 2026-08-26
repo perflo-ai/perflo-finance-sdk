@@ -105,7 +105,7 @@ describe("SDK reference generator", () => {
     const rows = operationRows(page);
     const functionNames = rows.map((row) => row.match(/^\| `([^`]+)`/u)?.[1]);
     const domainCounts = {
-      Accounts: 2,
+      Accounts: 4,
       Activity: 1,
       Beneficiaries: 8,
       Cards: 16,
@@ -121,10 +121,10 @@ describe("SDK reference generator", () => {
       Webhooks: 3,
     };
 
-    expect(rows).toHaveLength(75);
-    expect(new Set(functionNames).size).toBe(75);
+    expect(rows).toHaveLength(77);
+    expect(new Set(functionNames).size).toBe(77);
     expect(page.match(/^### /gmu)).toHaveLength(14);
-    expect(result.stdout).toContain("75 operations across 14 domains");
+    expect(result.stdout).toContain("77 operations across 14 domains");
     expect(
       page.startsWith(`<p>Before the generated region.</p>\n${startMarker}\n`),
     ).toBe(true);
@@ -159,6 +159,12 @@ describe("SDK reference generator", () => {
     const page = await readFile(fixture.pagePath, "utf8");
 
     expect(operationRow(page, "accounts")).toContain("| None | Bearer |");
+    expect(operationRow(page, "accountEndorsement")).toContain(
+      "| `query` (required) | Bearer |",
+    );
+    expect(operationRow(page, "createAccount")).toContain(
+      "| `body` (required)<br />`headers` (required) | Bearer |",
+    );
     expect(operationRow(page, "activity")).toContain(
       "| `query` (optional) | Bearer |",
     );
@@ -214,7 +220,7 @@ describe("SDK reference generator", () => {
     );
     expect(
       operationRows(page).filter((row) => row.includes("| Bearer |")),
-    ).toHaveLength(69);
+    ).toHaveLength(71);
   });
 
   it("escapes MDX-sensitive OpenAPI text", async () => {
