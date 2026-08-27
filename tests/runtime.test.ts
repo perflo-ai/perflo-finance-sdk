@@ -2,9 +2,6 @@ import { createServer } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 import type { ProblemDetails } from "../src/index.js";
 import {
-  agentGetCapability,
-  agentGetVendor,
-  agentListCapabilities,
   createPerfloClient,
   createPurchase,
   createPurchaseQuote,
@@ -17,6 +14,12 @@ import {
   isProblemDetails,
   isSubmissionUncertain,
   PERFLO_API_ORIGIN,
+  payPerUseConfirmPayment,
+  payPerUseGetCapability,
+  payPerUseGetVendor,
+  payPerUseListCapabilities,
+  payPerUsePayVendor,
+  payPerUseSearchVendorsWithBody,
   pollDevice,
   pollSign,
   publicConfig,
@@ -45,6 +48,14 @@ function mockFetch(responder: FetchResponder = () => jsonResponse({})) {
     implementation,
     requests,
   };
+}
+
+function keyedRequests(requests: Array<Request>) {
+  return requests.map((request) => ({
+    key: request.headers.get("Idempotency-Key"),
+    method: request.method,
+    path: new URL(request.url).pathname,
+  }));
 }
 
 function problemDetails(
@@ -976,8 +987,8 @@ describe("agent token refresh", () => {
   });
 });
 
-describe("purchase quote idempotency", () => {
-  it("attaches factory keys only to quotes and preserves caller keys", async () => {
+describe("idempotency key factory", () => {
+  it("attaches factory keys to quotes and preserves caller keys", async () => {
     const idempotencyKeyFactory = vi.fn(() => "factory_quote_key");
     const mocked = mockFetch();
     const interceptedKeys: Array<string | null> = [];
@@ -1013,13 +1024,19 @@ describe("purchase quote idempotency", () => {
     });
 
     expect(idempotencyKeyFactory).toHaveBeenCalledTimes(1);
-    expect(mocked.requests[0]?.headers.get("Idempotency-Key")).toBe(
-      "factory_quote_key",
-    );
-    expect(mocked.requests[1]?.headers.get("Idempotency-Key")).toBe(
-      "caller_quote_key",
-    );
-    expect(mocked.requests[2]?.headers.has("Idempotency-Key")).toBe(false);
+    expect(keyedRequests(mocked.requests)).toEqual([
+      {
+        key: "factory_quote_key",
+        method: "POST",
+        path: "/v1/purchase-quotes",
+      },
+      {
+        key: "caller_quote_key",
+        method: "POST",
+        path: "/v1/purchase-quotes",
+      },
+      { key: null, method: "POST", path: "/v1/purchases" },
+    ]);
     expect(generatedQuote.request?.headers.get("Idempotency-Key")).toBe(
       "factory_quote_key",
     );
@@ -1027,6 +1044,46 @@ describe("purchase quote idempotency", () => {
       "factory_quote_key",
       "caller_quote_key",
       null,
+    ]);
+  });
+
+  it("attaches factory keys only to replay-safe pay mutations", async () => {
+    const idempotencyKeyFactory = vi.fn(() => "factory_pay_key");
+    const mocked = mockFetch();
+    const client = createPerfloClient({
+      fetch: mocked.fetch,
+      idempotencyKeyFactory,
+      token: "pfa_agent_token",
+    });
+
+    await payPerUsePayVendor({
+      body: { maxCharge: { amount: "1.00", currency: "USD" } },
+      client,
+      path: { slug: "vendor" },
+    });
+    await payPerUsePayVendor({
+      body: { maxCharge: { amount: "1.00", currency: "USD" } },
+      client,
+      headers: { "Idempotency-Key": "caller_pay_key" },
+      path: { slug: "vendor" },
+    });
+    await payPerUseSearchVendorsWithBody({ body: { query: "vendor" }, client });
+    await payPerUseConfirmPayment({
+      body: { code: "confirmation_code" },
+      client,
+      path: { id: "payment_id" },
+    });
+
+    expect(idempotencyKeyFactory).toHaveBeenCalledTimes(1);
+    expect(keyedRequests(mocked.requests)).toEqual([
+      { key: "factory_pay_key", method: "POST", path: "/v1/pay/vendor" },
+      { key: "caller_pay_key", method: "POST", path: "/v1/pay/vendor" },
+      { key: null, method: "POST", path: "/v1/search" },
+      {
+        key: null,
+        method: "POST",
+        path: "/v1/payments/payment_id/confirm",
+      },
     ]);
   });
 
@@ -1225,9 +1282,9 @@ describe("generated operations", () => {
       client,
     });
     await publicConfig({ client });
-    await agentListCapabilities({ client });
-    await agentGetCapability({ client, path: { slug: "capability" } });
-    await agentGetVendor({ client, path: { slug: "vendor" } });
+    await payPerUseListCapabilities({ client });
+    await payPerUseGetCapability({ client, path: { slug: "capability" } });
+    await payPerUseGetVendor({ client, path: { slug: "vendor" } });
 
     expect(mocked.requests).toHaveLength(9);
     for (const request of mocked.requests) {

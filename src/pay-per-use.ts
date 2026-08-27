@@ -1,0 +1,555 @@
+import type { PerfloClient } from "./client.js";
+import {
+  payPerUseGetTransaction,
+  payPerUsePayVendor,
+} from "./generated/sdk.gen.js";
+import type {
+  PayPerUseError,
+  PayPerUseMoney,
+  PayPerUsePayment,
+  PayPerUsePayVendorRequest,
+  PayPerUsePayVendorResponseBody,
+  PayPerUseTransactionView,
+} from "./generated/types.gen.js";
+import {
+  now,
+  PollAbortedError,
+  PollDeadlineError,
+  scheduleAt,
+  validateDelay,
+  waitForInterval,
+} from "./polling.js";
+
+const DEFAULT_ATTEMPTS = 4;
+// The relay's own payment deadline is 35 seconds; stay above it.
+const DEFAULT_ATTEMPT_TIMEOUT_MS = 40_000;
+const DEFAULT_BACKOFF_MS = 1_000;
+const DEFAULT_READ_INTERVAL_MS = 2_000;
+const DEFAULT_READ_TIMEOUT_MS = 60_000;
+const MAX_SERVER_DELAY_MS = 60_000;
+const NEVER_ABORT_SIGNAL = new AbortController().signal;
+
+type RequestFields = {
+  request?: Request;
+  response?: Response;
+};
+
+type PayAttempt =
+  | ({
+      data: PayPerUsePayVendorResponseBody;
+      error: undefined;
+    } & RequestFields)
+  | ({ data: undefined; error: unknown } & RequestFields);
+
+export type PayVendorResult =
+  | {
+      kind: "settled";
+      data: PayPerUsePayVendorResponseBody;
+      idempotencyKey: string;
+    }
+  | {
+      kind: "confirmation_required";
+      data: PayPerUsePayVendorResponseBody;
+      idempotencyKey: string;
+    }
+  | {
+      kind: "recovered";
+      transaction: PayPerUseTransactionView;
+      idempotencyKey: string;
+    }
+  | {
+      kind: "unknown";
+      idempotencyKey: string;
+      transactionId?: string;
+      lastError: unknown;
+    };
+
+/**
+ * Unlike PollFields, a data result can be produced with no request made at all
+ * (a deadlineMs spent up front), so the success arm's fields are optional too.
+ */
+export type PayVendorOutcome =
+  | {
+      data: PayVendorResult;
+      error: undefined;
+      request?: Request;
+      response?: Response;
+    }
+  | {
+      data: undefined;
+      error: unknown;
+      request?: Request;
+      response?: Response;
+    };
+
+export interface PayVendorSafelyOptions {
+  client: PerfloClient;
+  slug: string;
+  /**
+   * Passed through whole and read on every attempt; do not mutate it during the
+   * call. maxCharge is also checked at runtime.
+   */
+  body: Omit<PayPerUsePayVendorRequest, "maxCharge"> & {
+    maxCharge: PayPerUseMoney;
+  };
+  /** Generated once with globalThis.crypto.randomUUID() when absent. */
+  idempotencyKey?: string;
+  /** Total attempts including the first. Defaults to 4. */
+  attempts?: number;
+  /** Per-attempt deadline. Defaults to 40 seconds, above the relay's 35-second deadline. */
+  attemptTimeoutMs?: number;
+  /** Base for exponential retry waits. Defaults to 1 second. */
+  backoffMs?: number;
+  /** Transaction-read polling interval. Defaults to 2 seconds. */
+  readIntervalMs?: number;
+  /** Transaction-read deadline. Defaults to 60 seconds. */
+  readTimeoutMs?: number;
+  /** Optional overall bound measured from invocation. */
+  deadlineMs?: number;
+  signal?: AbortSignal;
+}
+
+function isPayPerUseErrorEnvelope(value: unknown): value is PayPerUseError {
+  if (typeof value !== "object" || value === null || !("error" in value)) {
+    return false;
+  }
+  const error = value.error;
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+  );
+}
+
+function withFields(
+  data: PayVendorResult,
+  fields: RequestFields,
+): PayVendorOutcome {
+  return {
+    data,
+    error: undefined,
+    request: fields.request,
+    response: fields.response,
+  };
+}
+
+function abortedOutcome(
+  signal: AbortSignal | undefined,
+  fields: RequestFields = {},
+  transactionId?: string,
+): PayVendorOutcome {
+  return {
+    data: undefined,
+    error:
+      transactionId === undefined
+        ? new PollAbortedError(signal?.reason)
+        : new PollAbortedError(signal?.reason, transactionId),
+    request: fields.request,
+    response: fields.response,
+  };
+}
+
+function clampServerDelay(delayMs: number): number {
+  return Math.min(delayMs, MAX_SERVER_DELAY_MS);
+}
+
+function pollDelayMs(view: PayPerUsePayment): number | undefined {
+  const afterMs = view.poll?.afterMs;
+  return afterMs === undefined ? undefined : clampServerDelay(afterMs);
+}
+
+function retryAfterMs(response: Response | undefined): number | undefined {
+  const value = response?.headers.get("Retry-After")?.trim();
+  if (!value) {
+    return;
+  }
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0
+    ? clampServerDelay(seconds * 1_000)
+    : undefined;
+}
+
+async function runWithTimeout<T>(
+  timeoutMs: number,
+  callerSignal: AbortSignal | undefined,
+  operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const onCallerAbort = () => controller.abort(callerSignal?.reason);
+  callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
+  if (callerSignal?.aborted) {
+    controller.abort(callerSignal.reason);
+  }
+  const cancelTimeout = scheduleAt(now() + timeoutMs, () => controller.abort());
+
+  try {
+    return await operation(controller.signal);
+  } finally {
+    cancelTimeout();
+    callerSignal?.removeEventListener("abort", onCallerAbort);
+  }
+}
+
+function isDeadlineExhausted(deadlineAt: number | undefined): boolean {
+  return deadlineAt !== undefined && deadlineAt - now() <= 0;
+}
+
+function effectiveTimeout(
+  configured: number,
+  deadlineAt: number | undefined,
+): number {
+  return deadlineAt === undefined
+    ? configured
+    : Math.min(configured, Math.max(0, deadlineAt - now()));
+}
+
+async function waitBeforeNext(
+  delayMs: number,
+  deadlineAt: number | undefined,
+  signal: AbortSignal | undefined,
+): Promise<"ready" | "aborted" | "deadline"> {
+  if (signal?.aborted) {
+    return "aborted";
+  }
+  const waitMs = effectiveTimeout(delayMs, deadlineAt);
+  if (waitMs <= 0) {
+    return "deadline";
+  }
+  await waitForInterval(waitMs, signal ?? NEVER_ABORT_SIGNAL);
+  if (signal?.aborted) {
+    return "aborted";
+  }
+  return isDeadlineExhausted(deadlineAt) ? "deadline" : "ready";
+}
+
+async function recoverTransaction(options: {
+  client: PerfloClient;
+  deadlineAt: number | undefined;
+  deadlineMs: number | undefined;
+  idempotencyKey: string;
+  payFields: RequestFields;
+  readIntervalMs: number;
+  readTimeoutMs: number;
+  signal: AbortSignal | undefined;
+  transactionId: string;
+}): Promise<PayVendorOutcome> {
+  const unknown = (
+    lastError: unknown,
+    fields: RequestFields,
+  ): PayVendorOutcome =>
+    withFields(
+      {
+        kind: "unknown",
+        idempotencyKey: options.idempotencyKey,
+        transactionId: options.transactionId,
+        lastError,
+      },
+      fields,
+    );
+  const availableReadTime = effectiveTimeout(
+    options.readTimeoutMs,
+    options.deadlineAt,
+  );
+  if (availableReadTime <= 0) {
+    return unknown(
+      new PollDeadlineError(options.deadlineMs ?? options.readTimeoutMs),
+      options.payFields,
+    );
+  }
+
+  const readDeadlineAt = now() + availableReadTime;
+  let lastError: unknown = new PollDeadlineError(availableReadTime);
+  let lastFields = options.payFields;
+
+  while (true) {
+    if (options.signal?.aborted) {
+      return abortedOutcome(options.signal, lastFields, options.transactionId);
+    }
+    const readTimeRemaining = readDeadlineAt - now();
+    if (readTimeRemaining <= 0) {
+      return unknown(lastError, lastFields);
+    }
+
+    const read = await runWithTimeout(
+      readTimeRemaining,
+      options.signal,
+      (signal) =>
+        payPerUseGetTransaction({
+          client: options.client,
+          path: { id: options.transactionId },
+          signal,
+        }),
+    );
+    lastFields = read;
+
+    if (read.error === undefined && read.data !== undefined) {
+      const transaction = read.data.data;
+      if (transaction.terminal) {
+        return withFields(
+          {
+            kind: "recovered",
+            idempotencyKey: options.idempotencyKey,
+            transaction,
+          },
+          read,
+        );
+      }
+      lastError = transaction;
+    } else {
+      lastError = read.error;
+      if (options.signal?.aborted) {
+        return abortedOutcome(options.signal, read, options.transactionId);
+      }
+      const status = read.response?.status;
+      if (
+        status !== undefined &&
+        status !== 429 &&
+        (status < 500 || status >= 600)
+      ) {
+        return unknown(lastError, read);
+      }
+    }
+
+    const waitState = await waitBeforeNext(
+      options.readIntervalMs,
+      readDeadlineAt,
+      options.signal,
+    );
+    if (waitState === "aborted") {
+      return abortedOutcome(options.signal, lastFields, options.transactionId);
+    }
+    if (waitState === "deadline") {
+      return unknown(lastError, lastFields);
+    }
+  }
+}
+
+/**
+ * Pays a vendor with one idempotency key, bounded same-key replays, and bounded
+ * transaction recovery. A successful pay response returns `settled` or
+ * `confirmation_required`; an identified terminal transaction returns
+ * `recovered`; an unresolved delivered outcome returns `unknown`. A recovered
+ * result carries money state only: the transaction view has no vendor output,
+ * so vendor output is not recoverable after a lost response. A recovered
+ * transaction is terminal but not necessarily successful; read
+ * `transaction.status` and `chargeIsFinal`.
+ *
+ * The helper replays the same key on an open payment (`indeterminate`, `queued`,
+ * or `running`), a retry-safe 503, any other 5xx or 429 response, a transport
+ * failure, or an attempt timeout. An open payment's `poll.afterMs` is honored,
+ * clamped to 60 seconds. Any error envelope carrying a transaction identifier
+ * starts bounded reads until the transaction is terminal. It never creates a
+ * second key during one call. `settled` means the pay call returned a terminal
+ * payment view: read `data.data.status` and `chargeIsFinal`, because `failed`,
+ * `expired`, `canceled`, and `reversed` are terminal too.
+ *
+ * Refused 4xx outcomes and a run exhausted entirely by undelivered retry-safe
+ * 503 responses are returned as ordinary error fields and mean nothing was
+ * charged. A caller intending to reuse a key after a refusal must supply
+ * `idempotencyKey` because a generated key is returned only on data results.
+ * The same key may be retried only with an identical body; a changed body or a
+ * new purchase needs a new key.
+ * `request` and `response` on settled and confirmation results come from the
+ * pay attempt, on recovered results from the final read, and on unknown results
+ * from the last attempt or read when available. An aborted call returns
+ * `PollAbortedError` whose `lastValue` is the payment identifier when one was
+ * seen.
+ *
+ * The helper is bounded in attempts. With defaults, no server-supplied waits,
+ * and no `deadlineMs`, the worst-case wall time is about 227 seconds: four
+ * 40-second attempts, 1 + 2 + 4 seconds of backoff, and 60 seconds of
+ * transaction reads. A `Retry-After` on a 429 or a `poll.afterMs` on an open
+ * view can each add up to 60 seconds per replay; `deadlineMs` is the only
+ * overall wall-clock bound. When no key is supplied, this helper calls
+ * `globalThis.crypto.randomUUID()` once; Node.js 22.18 or later and workerd
+ * provide that API.
+ */
+export async function payVendorSafely(
+  options: PayVendorSafelyOptions,
+): Promise<PayVendorOutcome> {
+  const startedAt = now();
+  const attempts = options.attempts ?? DEFAULT_ATTEMPTS;
+  const attemptTimeoutMs =
+    options.attemptTimeoutMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS;
+  const backoffMs = options.backoffMs ?? DEFAULT_BACKOFF_MS;
+  const readIntervalMs = options.readIntervalMs ?? DEFAULT_READ_INTERVAL_MS;
+  const readTimeoutMs = options.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
+
+  if (!Number.isInteger(attempts) || attempts < 1) {
+    throw new TypeError(
+      "attempts must be an integer greater than or equal to 1",
+    );
+  }
+  validateDelay("attemptTimeoutMs", attemptTimeoutMs);
+  validateDelay("backoffMs", backoffMs);
+  validateDelay("readIntervalMs", readIntervalMs);
+  validateDelay("readTimeoutMs", readTimeoutMs);
+  if (options.deadlineMs !== undefined) {
+    validateDelay("deadlineMs", options.deadlineMs);
+  }
+  if (options.body?.maxCharge === undefined) {
+    throw new TypeError("body.maxCharge is required");
+  }
+
+  const idempotencyKey =
+    options.idempotencyKey ?? globalThis.crypto.randomUUID();
+  const deadlineAt =
+    options.deadlineMs === undefined
+      ? undefined
+      : startedAt + options.deadlineMs;
+  let lastAttempt: PayAttempt | undefined;
+  let lastError: unknown = new PollDeadlineError(
+    options.deadlineMs ?? attemptTimeoutMs,
+  );
+  let latestTransactionId: string | undefined;
+  let nextDelayMs: number | undefined;
+  let sawUndelivered503Only = true;
+
+  const unknown = (): PayVendorOutcome => {
+    if (sawUndelivered503Only && lastAttempt !== undefined) {
+      return {
+        data: undefined,
+        error: lastAttempt.error,
+        request: lastAttempt.request,
+        response: lastAttempt.response,
+      };
+    }
+    return withFields(
+      {
+        kind: "unknown",
+        idempotencyKey,
+        ...(latestTransactionId === undefined
+          ? {}
+          : { transactionId: latestTransactionId }),
+        lastError,
+      },
+      lastAttempt ?? {},
+    );
+  };
+
+  if (options.signal?.aborted) {
+    return abortedOutcome(options.signal);
+  }
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (attempt >= 2) {
+      const exponentialDelay = backoffMs * 2 ** (attempt - 2);
+      const waitState = await waitBeforeNext(
+        Math.max(exponentialDelay, nextDelayMs ?? 0),
+        deadlineAt,
+        options.signal,
+      );
+      nextDelayMs = undefined;
+      if (waitState === "aborted") {
+        return abortedOutcome(
+          options.signal,
+          lastAttempt ?? {},
+          latestTransactionId,
+        );
+      }
+      if (waitState === "deadline") {
+        return unknown();
+      }
+    }
+
+    const timeoutMs = effectiveTimeout(attemptTimeoutMs, deadlineAt);
+    if (timeoutMs <= 0) {
+      return unknown();
+    }
+
+    const result = await runWithTimeout(timeoutMs, options.signal, (signal) =>
+      payPerUsePayVendor({
+        body: options.body,
+        client: options.client,
+        headers: { "Idempotency-Key": idempotencyKey },
+        path: { slug: options.slug },
+        signal,
+      }),
+    );
+    lastAttempt = result;
+    lastError = result.error === undefined ? result.data : result.error;
+
+    if (result.error === undefined && result.data !== undefined) {
+      const view = result.data.data;
+      latestTransactionId = view.transactionId;
+      if (view.status === "indeterminate") {
+        nextDelayMs = pollDelayMs(view);
+        sawUndelivered503Only = false;
+        continue;
+      }
+      if (
+        result.response?.status === 202 ||
+        view.status === "pending_confirmation"
+      ) {
+        return withFields(
+          {
+            kind: "confirmation_required",
+            data: result.data,
+            idempotencyKey,
+          },
+          result,
+        );
+      }
+      if (!view.terminal) {
+        nextDelayMs = pollDelayMs(view);
+        sawUndelivered503Only = false;
+        continue;
+      }
+      return withFields(
+        { kind: "settled", data: result.data, idempotencyKey },
+        result,
+      );
+    }
+
+    if (result.response === undefined) {
+      if (options.signal?.aborted) {
+        return abortedOutcome(options.signal, result, latestTransactionId);
+      }
+      sawUndelivered503Only = false;
+      continue;
+    }
+
+    const envelope = isPayPerUseErrorEnvelope(result.error)
+      ? result.error
+      : undefined;
+    const transactionId = envelope?.error.details?.transactionId;
+    if (typeof transactionId === "string") {
+      latestTransactionId = transactionId;
+      return recoverTransaction({
+        client: options.client,
+        deadlineAt,
+        deadlineMs: options.deadlineMs,
+        idempotencyKey,
+        payFields: result,
+        readIntervalMs,
+        readTimeoutMs,
+        signal: options.signal,
+        transactionId,
+      });
+    }
+
+    if (
+      result.response.status === 503 &&
+      envelope?.error.details?.retrySafe === true
+    ) {
+      // The only continue that leaves sawUndelivered503Only true: a retry-safe 503 means the request was not delivered.
+      continue;
+    }
+
+    if (
+      result.response.status === 429 ||
+      (result.response.status >= 500 && result.response.status < 600)
+    ) {
+      if (result.response.status === 429) {
+        nextDelayMs = retryAfterMs(result.response);
+      }
+      sawUndelivered503Only = false;
+      continue;
+    }
+
+    return result;
+  }
+
+  return unknown();
+}

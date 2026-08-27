@@ -4,6 +4,71 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+## 0.1.0-beta.15 - 2026-08-27
+
+- Renamed the 23 pay-per-use operations from the `agent*` method family to the
+  `payPerUse*` family: `agentListCapabilities` to
+  `payPerUseListCapabilities`; `agentGetCapability` to
+  `payPerUseGetCapability`; `agentSearchGet` to `payPerUseSearchVendors`;
+  `agentSearch` to `payPerUseSearchVendorsWithBody`; `agentGetVendor` to
+  `payPerUseGetVendor`; `agentPayVendor` to `payPerUsePayVendor`;
+  `agentConfirmPayment` to `payPerUseConfirmPayment`; `agentGetAccount` to
+  `payPerUseGetAccount`; `agentListSubAccounts` to
+  `payPerUseListSubAccounts`; `agentCreateSubAccount` to
+  `payPerUseCreateSubAccount`; `agentGetSubAccount` to
+  `payPerUseGetSubAccount`; `agentUpdateSubAccount` to
+  `payPerUseUpdateSubAccount`; `agentDisableSubAccount` to
+  `payPerUseDisableSubAccount`; `agentDeleteSubAccounts` to
+  `payPerUseRejectBulkSubAccountDeletion`; `agentGetOwnKey` to
+  `payPerUseGetCallerAgentKey`; `agentListKeys` to
+  `payPerUseListAgentKeys`; `agentCreateKey` to `payPerUseCreateAgentKey`;
+  `agentRevokeKey` to `payPerUseRevokeAgentKey`; `agentCreateAccountKey` to
+  `payPerUseCreateAccountKey`; `agentGetAccountKey` to
+  `payPerUseGetAccountKey`; `agentRevokeAccountKey` to
+  `payPerUseRevokeAccountKey`; `agentListResources` to
+  `payPerUseListResources`; and `agentGetResource` to
+  `payPerUseGetResource`. The five generated domains are now
+  `Pay per use: discovery`, `Pay per use: payments`,
+  `Pay per use: account and sub-accounts`, `Pay per use: keys`, and
+  `Pay per use: resources`. The 73 `AgentMode*` types are now `PayPerUse*`.
+  Success-envelope types end in `ResponseBody`, including
+  `PayPerUseGetAccountResponseBody`. Stem-specific names are
+  `PayPerUseGetCallerAgentKeyResponseBody`,
+  `PayPerUseSearchVendorsResponseBody`,
+  `PayPerUseSearchVendorsWithBodyRequest`,
+  `PayPerUseSearchVendorsWithBodyResponseBody`,
+  `PayPerUseCreateAgentKeyRequest`,
+  `PayPerUseCreateAgentKeyResponseBody`,
+  `PayPerUseRevokeAgentKeyResponseBody`,
+  `PayPerUseListAgentKeysResponseBody`, and `PayPerUsePayVendorRequest`
+  alongside the `PayPerUseRejectBulkSubAccountDeletionData`,
+  `PayPerUseRejectBulkSubAccountDeletionError`, and
+  `PayPerUseRejectBulkSubAccountDeletionErrors` family (breaking)
+- Added `payPerUseListTransactions` and `payPerUseGetTransaction` for
+  `GET /v1/transactions` and `GET /v1/transactions/{id}`, with
+  `PayPerUseTransactionView`, `PayPerUseSignedMoney`,
+  `PayPerUseListTransactionsListMeta`,
+  `PayPerUseListTransactionsResponseBody`, and
+  `PayPerUseGetTransactionResponseBody` (additive)
+- Added `payVendorSafely`, `PayVendorOutcome`, and `PayVendorResult`: one
+  single-key payment call with bounded attempts that replays the same
+  `Idempotency-Key` on an open payment (`indeterminate`, `queued`, or
+  `running`), on `SERVICE_UNAVAILABLE` with `retrySafe: true`, on
+  `OPERATION_OUTCOME_UNKNOWN` and other 5xx or 429 answers, and on a transport
+  failure or attempt timeout; reads the transaction any error envelope names
+  until it is terminal; and returns `settled`, `confirmation_required`,
+  `recovered`, or `unknown`, with refusals and exhausted undelivered 503s as
+  ordinary error fields (additive)
+- `idempotencyKeyFactory` now also supplies a key to `payPerUsePayVendor`
+  (`POST /v1/pay/{slug}`) when the caller sends none. A factory configured for
+  purchase quotes stamps pay calls too and must return a fresh value for every
+  call; a caller-provided `Idempotency-Key` still wins. Supply the
+  `Idempotency-Key` yourself, or use `payVendorSafely`, for a payment you may
+  retry: a factory key is fresh for every request, so your own retry would start
+  a second payment (breaking)
+
+## 0.1.0-beta.14 - 2026-08-26
+
 - Added 23 agent-mode operations across the generated `Agent discovery`,
   `Agent payments`, `Agent account`, `Agent keys`, and `Agent resources` domains,
   including `agentListCapabilities`, `agentPayVendor`, `agentCreateSubAccount`,

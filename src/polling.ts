@@ -122,45 +122,66 @@ export function isActionableOperation(operation: OperationView): boolean {
   return exhaustive;
 }
 
-function now(): number {
+export function now(): number {
   return globalThis.performance.now();
 }
 
-function validateDelay(name: "intervalMs" | "timeoutMs", value: number) {
+export function validateDelay(
+  name:
+    | "attemptTimeoutMs"
+    | "backoffMs"
+    | "deadlineMs"
+    | "intervalMs"
+    | "readIntervalMs"
+    | "readTimeoutMs"
+    | "timeoutMs",
+  value: number,
+) {
   if (!Number.isFinite(value) || value <= 0) {
     throw new TypeError(`${name} must be a finite positive number`);
   }
 }
 
-function waitForInterval(delayMs: number, signal: AbortSignal): Promise<void> {
-  const endsAt = now() + delayMs;
+export function scheduleAt(deadlineAt: number, onFire: () => void): () => void {
+  let cancelled = false;
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
+  const schedule = () => {
+    if (cancelled) {
+      return;
+    }
+    const remainingMs = deadlineAt - now();
+    if (remainingMs <= 0) {
+      cancelled = true;
+      onFire();
+      return;
+    }
+    timer = globalThis.setTimeout(
+      schedule,
+      Math.min(remainingMs, MAX_TIMER_DELAY_MS),
+    );
+  };
+
+  schedule();
+  return () => {
+    cancelled = true;
+    if (timer !== undefined) {
+      globalThis.clearTimeout(timer);
+    }
+  };
+}
+
+export function waitForInterval(
+  delayMs: number,
+  signal: AbortSignal,
+): Promise<void> {
   return new Promise((resolve) => {
-    let settled = false;
-    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    let cancel: (() => void) | undefined;
 
     const finish = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      if (timer !== undefined) {
-        globalThis.clearTimeout(timer);
-      }
+      cancel?.();
       signal.removeEventListener("abort", finish);
       resolve();
-    };
-
-    const schedule = () => {
-      const remainingMs = endsAt - now();
-      if (remainingMs <= 0) {
-        finish();
-        return;
-      }
-      timer = globalThis.setTimeout(
-        schedule,
-        Math.min(remainingMs, MAX_TIMER_DELAY_MS),
-      );
     };
 
     signal.addEventListener("abort", finish, { once: true });
@@ -168,7 +189,7 @@ function waitForInterval(delayMs: number, signal: AbortSignal): Promise<void> {
       finish();
       return;
     }
-    schedule();
+    cancel = scheduleAt(now() + delayMs, finish);
   });
 }
 
@@ -218,7 +239,6 @@ export async function pollUntil<T>(options: {
   const deadlineAt = startedAt + options.timeoutMs;
   const controller = new AbortController();
   let controlError: PollAbortedError<T> | PollDeadlineError<T> | undefined;
-  let deadlineTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let resolveCurrentControl:
     | ((error: PollAbortedError<T> | PollDeadlineError<T>) => void)
     | undefined;
@@ -240,20 +260,8 @@ export async function pollUntil<T>(options: {
     const error = makeDeadlineError();
     activateControl(error, error);
   };
-  const scheduleDeadline = () => {
-    const remainingMs = deadlineAt - now();
-    if (remainingMs <= 0) {
-      onDeadline();
-      return;
-    }
-    deadlineTimer = globalThis.setTimeout(
-      scheduleDeadline,
-      Math.min(remainingMs, MAX_TIMER_DELAY_MS),
-    );
-  };
-
   options.signal?.addEventListener("abort", onCallerAbort, { once: true });
-  scheduleDeadline();
+  const cancelDeadline = scheduleAt(deadlineAt, onDeadline);
 
   try {
     while (true) {
@@ -314,9 +322,7 @@ export async function pollUntil<T>(options: {
     }
   } finally {
     resolveCurrentControl = undefined;
-    if (deadlineTimer !== undefined) {
-      globalThis.clearTimeout(deadlineTimer);
-    }
+    cancelDeadline();
     options.signal?.removeEventListener("abort", onCallerAbort);
   }
 }

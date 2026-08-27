@@ -16,6 +16,12 @@ export {
   services as listServices,
 } from "./generated/index.js";
 export {
+  type PayVendorOutcome,
+  type PayVendorResult,
+  type PayVendorSafelyOptions,
+  payVendorSafely,
+} from "./pay-per-use.js";
+export {
   isActionableOperation,
   isPollAbortedError,
   isPollDeadlineError,

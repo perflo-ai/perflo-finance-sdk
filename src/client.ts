@@ -14,6 +14,7 @@ import type {
 export const PERFLO_API_ORIGIN = "https://api-gateway.perflo.ai";
 
 const AGENT_TOKEN_REFRESH_PATH = "/v1/agent-tokens/refresh";
+const PAY_PER_USE_PAY_PATH_PATTERN = /^\/v1\/pay\/[^/]+$/;
 const PURCHASE_QUOTE_PATH = "/v1/purchase-quotes";
 const BEARER_SECURITY = [{ scheme: "bearer", type: "http" }] as const;
 
@@ -216,7 +217,8 @@ function createPolicyFetch({
     if (
       idempotencyKeyFactory !== undefined &&
       request.method === "POST" &&
-      url.pathname === PURCHASE_QUOTE_PATH &&
+      (url.pathname === PURCHASE_QUOTE_PATH ||
+        PAY_PER_USE_PAY_PATH_PATTERN.test(url.pathname)) &&
       !request.headers.has("Idempotency-Key")
     ) {
       request.headers.set("Idempotency-Key", idempotencyKeyFactory());

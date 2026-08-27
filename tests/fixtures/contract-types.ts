@@ -17,6 +17,7 @@ import {
   listServices,
   type Money,
   type OperationView,
+  type PayVendorResult,
   type PollAbortedError,
   type PollDeadlineError,
   type PollDeviceError,
@@ -99,6 +100,12 @@ export type DeadlineCodeStaysLiteral = Assert<
 >;
 export type AbortedCodeStaysLiteral = Assert<
   Equal<PollAbortedError["code"], "POLL_ABORTED">
+>;
+export type PayVendorKindsStayExhaustive = Assert<
+  Equal<
+    PayVendorResult["kind"],
+    "settled" | "confirmation_required" | "recovered" | "unknown"
+  >
 >;
 
 export function narrowMandate(body: CreateMandateData["body"]): string {
