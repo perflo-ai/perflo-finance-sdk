@@ -5704,7 +5704,7 @@
             ]
           },
           "iconUrl": {
-            "description": "The vendor icon URL when stated.",
+            "description": "The vendor icon URL, or null when it is not stated.",
             "type": [
               "string",
               "null"
@@ -7570,7 +7570,7 @@
     },
     "securitySchemes": {
       "BearerAuth": {
-        "description": "A Perflo customer access token, a pfa_ pairing token, or the credential a pay-per-use operation names (a Privy credential, a Perfolio credential, an agent key, or an account key).",
+        "description": "A Perflo customer access token, a pfa_ pairing token, or the credential a pay-per-use operation names (a Privy credential, an agent key, or an account key).",
         "scheme": "bearer",
         "type": "http"
       }
@@ -8136,7 +8136,7 @@
     },
     "/v1/account": {
       "get": {
-        "description": "Get the account's spendable balance and active spending policy. Use a Privy credential, a Perfolio credential, or an account key.",
+        "description": "Get the account's spendable balance and active spending policy. Use a Privy credential or an account key.",
         "operationId": "pay_per_use_get_account",
         "responses": {
           "200": {
@@ -14581,7 +14581,7 @@
     },
     "/v1/keys": {
       "get": {
-        "description": "List agent-key metadata using a Privy credential, Perfolio credential, or account key.",
+        "description": "List agent-key metadata using a Privy credential or an account key.",
         "operationId": "pay_per_use_list_agent_keys",
         "responses": {
           "200": {
@@ -14862,7 +14862,7 @@
     },
     "/v1/keys/{id}": {
       "delete": {
-        "description": "Revoke an agent key by identifier using a Privy credential, Perfolio credential, or account key.",
+        "description": "Revoke an agent key by identifier using a Privy credential or an account key.",
         "operationId": "pay_per_use_revoke_agent_key",
         "parameters": [
           {
@@ -17932,7 +17932,7 @@
     },
     "/v1/pay/{slug}": {
       "post": {
-        "description": "Start an idempotent vendor payment and return its current lifecycle state. Use a Privy credential, a Perfolio credential, or an agent key.",
+        "description": "Start an idempotent vendor payment and return its current lifecycle state. Use a Privy credential or an agent key.",
         "operationId": "pay_per_use_pay_vendor",
         "parameters": [
           {
@@ -20544,7 +20544,7 @@
     },
     "/v1/search": {
       "get": {
-        "description": "Search vendors by a plain-language query, with the query and an optional `limit` in the URL. Use a Privy credential, a Perfolio credential, an agent key, or an account key.",
+        "description": "Search vendors by a plain-language query, with the query and an optional `limit` in the URL. Use a Privy credential, an agent key, or an account key.",
         "operationId": "pay_per_use_search_vendors",
         "parameters": [
           {
@@ -20658,7 +20658,7 @@
         ]
       },
       "post": {
-        "description": "Search vendors with a JSON query and an optional `limit` in the request body. Use a Privy credential, a Perfolio credential, an agent key, or an account key.",
+        "description": "Search vendors with a JSON query and an optional `limit` in the request body. Use a Privy credential, an agent key, or an account key.",
         "operationId": "pay_per_use_search_vendors_with_body",
         "requestBody": {
           "content": {
@@ -22118,7 +22118,7 @@
         ]
       },
       "post": {
-        "description": "Create a sub-account. Perfolio credentials and agent keys cannot create one.",
+        "description": "Create a sub-account. Agent keys cannot create one.",
         "operationId": "pay_per_use_create_sub_account",
         "requestBody": {
           "content": {
@@ -22568,7 +22568,7 @@
         ]
       },
       "patch": {
-        "description": "Update a sub-account by identifier or case-insensitive label and return the current sub-account. Perfolio credentials and agent keys cannot update one.",
+        "description": "Update a sub-account by identifier or case-insensitive label and return the current sub-account. Agent keys cannot update one.",
         "operationId": "pay_per_use_update_sub_account",
         "parameters": [
           {
@@ -23887,11 +23887,11 @@
       "name": "Webhooks"
     },
     {
-      "description": "Discover the capability groups, categories, and vendors an agent can pay. Search takes a Privy credential, a Perfolio credential, an agent key, or an account key.",
+      "description": "Discover the capability groups, categories, and vendors an agent can pay. Search takes a Privy credential, an agent key, or an account key.",
       "name": "Pay per use: discovery"
     },
     {
-      "description": "Start a vendor payment, confirm one that is held, and read the account's transactions. Payments take a Privy credential, a Perfolio credential, or an agent key; an account key never spends. The transaction reads take an agent key \u2014 which sees only its own sub-account \u2014 or an account key.",
+      "description": "Start a vendor payment, confirm one that is held, and read the account's transactions. Payments take a Privy credential or an agent key; an account key never spends. The transaction reads take an agent key \u2014 which sees only its own sub-account \u2014 or an account key.",
       "name": "Pay per use: payments"
     },
     {
@@ -23899,11 +23899,11 @@
       "name": "Pay per use: account and sub-accounts"
     },
     {
-      "description": "Create, inspect, and revoke the agent keys an agent spends with, and read the calling agent key's own limits. Creating an agent key takes a Privy credential or an account key; listing and revoking also take a Perfolio credential. The account key itself is created, read, and revoked with a Privy credential only.",
+      "description": "Create, inspect, and revoke the agent keys an agent spends with, and read the calling agent key's own limits. Creating, listing, and revoking an agent key take a Privy credential or an account key. The account key itself is created, read, and revoked with a Privy credential only.",
       "name": "Pay per use: keys"
     },
     {
-      "description": "List and retrieve the resources a payment delivered, such as a gift card code or an inbox. Privy credential, Perfolio credential, or account key; agent keys are refused.",
+      "description": "List and retrieve the resources a payment delivered, such as a gift card code or an inbox. Privy credential or account key; agent keys are refused.",
       "name": "Pay per use: resources"
     }
   ]

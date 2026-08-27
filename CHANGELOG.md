@@ -50,15 +50,24 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
   `PayPerUseListTransactionsListMeta`,
   `PayPerUseListTransactionsResponseBody`, and
   `PayPerUseGetTransactionResponseBody` (additive)
-- Added `payVendorSafely`, `PayVendorOutcome`, and `PayVendorResult`: one
-  single-key payment call with bounded attempts that replays the same
+- Added `payVendorSafely`, `PayVendorSafelyOptions`, `PayVendorOutcome`, and
+  `PayVendorResult`: one single-key payment call with bounded attempts that
+  replays the same
   `Idempotency-Key` on an open payment (`indeterminate`, `queued`, or
   `running`), on `SERVICE_UNAVAILABLE` with `retrySafe: true`, on
-  `OPERATION_OUTCOME_UNKNOWN` and other 5xx or 429 answers, and on a transport
-  failure or attempt timeout; reads the transaction any error envelope names
-  until it is terminal; and returns `settled`, `confirmation_required`,
-  `recovered`, or `unknown`, with refusals and exhausted undelivered 503s as
-  ordinary error fields (additive)
+  `OPERATION_OUTCOME_UNKNOWN` and other 5xx or 429 answers, on a transport
+  failure or attempt timeout, and on a successful or redirect status that
+  carries no payment; reads when a transaction identifier is already known,
+  including one named by an error envelope, until the transaction is terminal;
+  and returns `settled`, `confirmation_required`, `recovered`, or `unknown`,
+  with refusals and exhausted undelivered 503s as ordinary error fields
+  (additive)
+- Added `InvalidPaymentResponseError` and
+  `isInvalidPaymentResponseError`. When a successful status carried no payment
+  or no transaction, `lastError` is the client's decode error or an
+  `InvalidPaymentResponseError` whose `body` and `status` are what arrived;
+  every other `unknown` keeps the last server envelope, transport error,
+  deadline error, or non-terminal transaction view it saw (additive)
 - `idempotencyKeyFactory` now also supplies a key to `payPerUsePayVendor`
   (`POST /v1/pay/{slug}`) when the caller sends none. A factory configured for
   purchase quotes stamps pay calls too and must return a fresh value for every
