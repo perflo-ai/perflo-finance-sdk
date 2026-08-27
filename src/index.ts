@@ -16,6 +16,8 @@ export {
   services as listServices,
 } from "./generated/index.js";
 export {
+  InvalidPaymentResponseError,
+  isInvalidPaymentResponseError,
   type PayVendorOutcome,
   type PayVendorResult,
   type PayVendorSafelyOptions,

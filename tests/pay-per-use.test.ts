@@ -4,9 +4,12 @@ import type {
   PayPerUsePayment,
   PayPerUsePayVendorResponseBody,
   PayPerUseTransactionView,
+  PayVendorOutcome,
 } from "../src/index.js";
 import {
   createPerfloClient,
+  InvalidPaymentResponseError,
+  isInvalidPaymentResponseError,
   isPollAbortedError,
   payVendorSafely,
 } from "../src/index.js";
@@ -24,6 +27,13 @@ function jsonResponse(
   return new Response(JSON.stringify(body), {
     headers: { "Content-Type": "application/json", ...headers },
     status,
+  });
+}
+
+function malformedJsonResponse(): Response {
+  return new Response("not json", {
+    headers: { "Content-Type": "application/json" },
+    status: 200,
   });
 }
 
@@ -157,6 +167,14 @@ function expectNoTimers() {
   expect(vi.getTimerCount()).toBe(0);
 }
 
+function unknownData(outcome: PayVendorOutcome) {
+  expect(outcome.data?.kind).toBe("unknown");
+  if (outcome.data?.kind !== "unknown") {
+    throw new Error("Expected an unknown outcome");
+  }
+  return outcome.data;
+}
+
 describe("payVendorSafely", () => {
   beforeEach(() => {
     vi.useFakeTimers({
@@ -227,6 +245,352 @@ describe("payVendorSafely", () => {
       idempotencyKey: "same_key",
     });
     await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await promise;
+
+    expect(outcome.data?.kind).toBe("settled");
+    expectSequence(
+      mocked.requests,
+      ["/v1/pay/vendor", "/v1/pay/vendor"],
+      "same_key",
+    );
+    expectNoTimers();
+  });
+
+  it("replays a malformed 200 response with the generated key", async () => {
+    const mocked = mockFetch((_request, call) =>
+      call === 1 ? malformedJsonResponse() : jsonResponse(payment("succeeded")),
+    );
+    const promise = payVendorSafely(options(mocked.fetch));
+    await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await promise;
+    const key = outcome.data?.idempotencyKey;
+
+    expect(outcome.data?.kind).toBe("settled");
+    expect(key).toEqual(expect.any(String));
+    expectSequence(mocked.requests, ["/v1/pay/vendor", "/v1/pay/vendor"], key);
+    expectNoTimers();
+  });
+
+  it("returns unknown after bounded malformed 200 responses", async () => {
+    const mocked = mockFetch(() => malformedJsonResponse());
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      attempts: 2,
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await promise;
+
+    const data = unknownData(outcome);
+    expect(data.lastError).toBeInstanceOf(SyntaxError);
+    expect(data.idempotencyKey).toEqual(expect.any(String));
+    expect("transactionId" in data).toBe(false);
+    expect(outcome.response?.status).toBe(200);
+    expectSequence(
+      mocked.requests,
+      ["/v1/pay/vendor", "/v1/pay/vendor"],
+      data.idempotencyKey,
+    );
+    expectNoTimers();
+  });
+
+  it("returns an invalid-response error after bounded null 200 responses", async () => {
+    const mocked = mockFetch(() => jsonResponse(null));
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      attempts: 2,
+      idempotencyKey: "same_key",
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await promise;
+
+    const data = unknownData(outcome);
+    expect(data.lastError).toBeInstanceOf(InvalidPaymentResponseError);
+    expect(isInvalidPaymentResponseError(data.lastError)).toBe(true);
+    expect(data.lastError).toMatchObject({
+      body: null,
+      code: "INVALID_PAYMENT_RESPONSE",
+      status: 200,
+    });
+    expectSequence(
+      mocked.requests,
+      ["/v1/pay/vendor", "/v1/pay/vendor"],
+      "same_key",
+    );
+    expectNoTimers();
+  });
+
+  // A named transaction routes this ambiguous POST response to a GET read.
+  it("reads a payment envelope missing chargeIsFinal", async () => {
+    const mocked = mockFetch((_request, call) =>
+      call === 1
+        ? jsonResponse({
+            data: {
+              status: "succeeded",
+              terminal: true,
+              transactionId: "transaction_id",
+            },
+            meta: { requestId: "request_id" },
+          })
+        : jsonResponse({
+            data: transaction(true),
+            meta: { requestId: "read_1" },
+          }),
+    );
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      idempotencyKey: "same_key",
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await promise;
+
+    expect(outcome.data?.kind).toBe("recovered");
+    expectSequence(
+      mocked.requests,
+      ["/v1/pay/vendor", "/v1/transactions/transaction_id"],
+      "same_key",
+    );
+    expectNoTimers();
+  });
+
+  it("replays an invalid payment envelope", async () => {
+    const mocked = mockFetch((_request, call) =>
+      call === 1
+        ? jsonResponse({ data: "x", meta: {} })
+        : jsonResponse(payment("succeeded")),
+    );
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      idempotencyKey: "same_key",
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await promise;
+
+    expect(outcome.data?.kind).toBe("settled");
+    expectSequence(
+      mocked.requests,
+      ["/v1/pay/vendor", "/v1/pay/vendor"],
+      "same_key",
+    );
+    expectNoTimers();
+  });
+
+  it("replays an empty 204 response", async () => {
+    const mocked = mockFetch((_request, call) =>
+      call === 1
+        ? new Response(null, { status: 204 })
+        : jsonResponse(payment("succeeded")),
+    );
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      idempotencyKey: "same_key",
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await promise;
+
+    expect(outcome.data?.kind).toBe("settled");
+    expectSequence(
+      mocked.requests,
+      ["/v1/pay/vendor", "/v1/pay/vendor"],
+      "same_key",
+    );
+    expectNoTimers();
+  });
+
+  it("replays an empty redirect response", async () => {
+    const mocked = mockFetch((_request, call) =>
+      call === 1
+        ? new Response(null, {
+            headers: { Location: "https://example.com/redirect" },
+            status: 302,
+          })
+        : jsonResponse(payment("succeeded")),
+    );
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      idempotencyKey: "same_key",
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await promise;
+
+    expect(outcome.data?.kind).toBe("settled");
+    expectSequence(
+      mocked.requests,
+      ["/v1/pay/vendor", "/v1/pay/vendor"],
+      "same_key",
+    );
+    expectNoTimers();
+  });
+
+  it("reads a known transaction after a malformed 200 replay", async () => {
+    const mocked = mockFetch((_request, call) => {
+      if (call === 1) {
+        return jsonResponse(payment("indeterminate"));
+      }
+      if (call === 2) {
+        return malformedJsonResponse();
+      }
+      return jsonResponse({
+        data: transaction(true),
+        meta: { requestId: "read_1" },
+      });
+    });
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      idempotencyKey: "same_key",
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await promise;
+
+    expect(outcome.data?.kind).toBe("recovered");
+    expectSequence(
+      mocked.requests,
+      ["/v1/pay/vendor", "/v1/pay/vendor", "/v1/transactions/transaction_id"],
+      "same_key",
+    );
+    expect(
+      mocked.requests.filter((request) => request.method === "POST"),
+    ).toHaveLength(2);
+    expectNoTimers();
+  });
+
+  it("keeps reading after a null 200 transaction response", async () => {
+    const mocked = mockFetch((_request, call) => {
+      if (call === 1) {
+        return jsonResponse(
+          payError("SETTLEMENT_RECORDING_FAILED", {
+            transactionId: "transaction_id",
+          }),
+          500,
+        );
+      }
+      return call === 2
+        ? jsonResponse(null)
+        : jsonResponse({
+            data: transaction(true),
+            meta: { requestId: "read_2" },
+          });
+    });
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      idempotencyKey: "same_key",
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+    const outcome = await promise;
+
+    expect(outcome.data?.kind).toBe("recovered");
+    expectSequence(
+      mocked.requests,
+      [
+        "/v1/pay/vendor",
+        "/v1/transactions/transaction_id",
+        "/v1/transactions/transaction_id",
+      ],
+      "same_key",
+    );
+    expectNoTimers();
+  });
+
+  it("keeps reading malformed 200 transaction responses until the deadline", async () => {
+    const mocked = mockFetch((_request, call) =>
+      call === 1
+        ? jsonResponse(
+            payError("SETTLEMENT_RECORDING_FAILED", {
+              transactionId: "transaction_id",
+            }),
+            500,
+          )
+        : malformedJsonResponse(),
+    );
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      idempotencyKey: "same_key",
+      readIntervalMs: 1_000,
+      readTimeoutMs: 2_500,
+    });
+    await vi.advanceTimersByTimeAsync(2_500);
+    const outcome = await promise;
+
+    const data = unknownData(outcome);
+    expect(data.transactionId).toBe("transaction_id");
+    expect(data.lastError).toBeInstanceOf(SyntaxError);
+    expect(outcome.response?.status).toBe(200);
+    expectSequence(
+      mocked.requests,
+      [
+        "/v1/pay/vendor",
+        "/v1/transactions/transaction_id",
+        "/v1/transactions/transaction_id",
+        "/v1/transactions/transaction_id",
+      ],
+      "same_key",
+    );
+    expectNoTimers();
+  });
+
+  it("returns unknown when null 200 transaction reads reach the deadline", async () => {
+    const mocked = mockFetch((_request, call) =>
+      call === 1
+        ? jsonResponse(
+            payError("SETTLEMENT_RECORDING_FAILED", {
+              transactionId: "transaction_id",
+            }),
+            500,
+          )
+        : jsonResponse(null),
+    );
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      idempotencyKey: "same_key",
+      readIntervalMs: 1_000,
+      readTimeoutMs: 2_500,
+    });
+    await vi.advanceTimersByTimeAsync(2_500);
+    const outcome = await promise;
+
+    const data = unknownData(outcome);
+    expect(data.transactionId).toBe("transaction_id");
+    expect(data.lastError).toBeInstanceOf(InvalidPaymentResponseError);
+    expect(isInvalidPaymentResponseError(data.lastError)).toBe(true);
+    expect(data.lastError).toMatchObject({
+      body: null,
+      code: "INVALID_PAYMENT_RESPONSE",
+      status: 200,
+    });
+    expectSequence(
+      mocked.requests,
+      [
+        "/v1/pay/vendor",
+        "/v1/transactions/transaction_id",
+        "/v1/transactions/transaction_id",
+        "/v1/transactions/transaction_id",
+      ],
+      "same_key",
+    );
+    expectNoTimers();
+  });
+
+  it("ignores a nonnumeric poll delay and uses the ordinary backoff", async () => {
+    const mocked = mockFetch((_request, call) =>
+      call === 1
+        ? jsonResponse(
+            payment("running", {
+              poll: {
+                afterMs: "soon",
+                maxWaitMs: 5_000,
+                url: "/poll",
+              } as never,
+            }),
+          )
+        : jsonResponse(payment("succeeded")),
+    );
+    const promise = payVendorSafely({
+      ...options(mocked.fetch),
+      backoffMs: 250,
+      idempotencyKey: "same_key",
+    });
+    await vi.advanceTimersByTimeAsync(249);
+    expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
+    await vi.advanceTimersByTimeAsync(1);
     const outcome = await promise;
 
     expect(outcome.data?.kind).toBe("settled");
@@ -431,13 +795,6 @@ describe("payVendorSafely", () => {
       ],
       "same_key",
     );
-    expect(
-      new Set(
-        mocked.requests
-          .filter((request) => request.method === "POST")
-          .map((request) => request.headers.get("Idempotency-Key")),
-      ),
-    ).toEqual(new Set(["same_key"]));
     expectNoTimers();
   });
 
@@ -723,6 +1080,141 @@ describe("payVendorSafely", () => {
 
     expect(settled.data?.kind).toBe("settled");
     expectSequence(landed.requests, ["/v1/pay/vendor"], "landed_key");
+    expectNoTimers();
+  });
+
+  it("honors caller abort on a final indeterminate success", async () => {
+    const controller = new AbortController();
+    const mocked = mockFetch(() => {
+      controller.abort("stop after indeterminate");
+      return jsonResponse(payment("indeterminate"));
+    });
+    const outcome = await payVendorSafely({
+      ...options(mocked.fetch),
+      attempts: 1,
+      idempotencyKey: "same_key",
+      signal: controller.signal,
+    });
+
+    expect(isPollAbortedError(outcome.error)).toBe(true);
+    expect((outcome.error as { lastValue?: unknown }).lastValue).toBe(
+      "transaction_id",
+    );
+    expect(outcome.request).toBeDefined();
+    expect(outcome.response?.status).toBe(200);
+    expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
+    expectNoTimers();
+  });
+
+  it("honors caller abort on a final running success", async () => {
+    const controller = new AbortController();
+    const mocked = mockFetch(() => {
+      controller.abort("stop after running");
+      return jsonResponse(payment("running"));
+    });
+    const outcome = await payVendorSafely({
+      ...options(mocked.fetch),
+      attempts: 1,
+      idempotencyKey: "same_key",
+      signal: controller.signal,
+    });
+
+    expect(isPollAbortedError(outcome.error)).toBe(true);
+    expect((outcome.error as { lastValue?: unknown }).lastValue).toBe(
+      "transaction_id",
+    );
+    expect(outcome.request).toBeDefined();
+    expect(outcome.response?.status).toBe(200);
+    expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
+    expectNoTimers();
+  });
+
+  it("honors caller abort on an error response with a transaction id", async () => {
+    const controller = new AbortController();
+    const mocked = mockFetch(() => {
+      controller.abort("stop after error");
+      return jsonResponse(
+        payError("OPERATION_OUTCOME_UNKNOWN", {
+          transactionId: "transaction_id",
+        }),
+        500,
+      );
+    });
+    const outcome = await payVendorSafely({
+      ...options(mocked.fetch),
+      attempts: 1,
+      idempotencyKey: "same_key",
+      signal: controller.signal,
+    });
+
+    expect(isPollAbortedError(outcome.error)).toBe(true);
+    expect((outcome.error as { lastValue?: unknown }).lastValue).toBe(
+      "transaction_id",
+    );
+    expect(outcome.request?.url.endsWith("/v1/pay/vendor")).toBe(true);
+    expect(outcome.response?.status).toBe(500);
+    expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
+    expectNoTimers();
+  });
+
+  it("honors caller abort on an error response without a transaction id", async () => {
+    const controller = new AbortController();
+    const mocked = mockFetch(() => {
+      controller.abort("stop after error");
+      return jsonResponse(payError("OPERATION_OUTCOME_UNKNOWN"), 500);
+    });
+    const outcome = await payVendorSafely({
+      ...options(mocked.fetch),
+      attempts: 1,
+      idempotencyKey: "same_key",
+      signal: controller.signal,
+    });
+
+    expect(isPollAbortedError(outcome.error)).toBe(true);
+    expect(
+      (outcome.error as { lastValue?: unknown }).lastValue,
+    ).toBeUndefined();
+    expect(outcome.response?.status).toBe(500);
+    expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
+    expectNoTimers();
+  });
+
+  it("returns abort over a plain refusal", async () => {
+    const controller = new AbortController();
+    const mocked = mockFetch(() => {
+      controller.abort("stop after refusal");
+      return jsonResponse(payError("MAX_CHARGE_EXCEEDED"), 422);
+    });
+    const outcome = await payVendorSafely({
+      ...options(mocked.fetch),
+      attempts: 1,
+      idempotencyKey: "same_key",
+      signal: controller.signal,
+    });
+
+    expect(isPollAbortedError(outcome.error)).toBe(true);
+    expect(
+      (outcome.error as { lastValue?: unknown }).lastValue,
+    ).toBeUndefined();
+    expect(outcome.response?.status).toBe(422);
+    expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
+    expectNoTimers();
+  });
+
+  it("keeps a landed confirmation requirement after abort", async () => {
+    const controller = new AbortController();
+    const mocked = mockFetch(() => {
+      controller.abort("stop after confirmation requirement");
+      return jsonResponse(payment("pending_confirmation"), 202);
+    });
+    const outcome = await payVendorSafely({
+      ...options(mocked.fetch),
+      idempotencyKey: "same_key",
+      signal: controller.signal,
+    });
+
+    expect(outcome.data?.kind).toBe("confirmation_required");
+    expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
     expectNoTimers();
   });
 

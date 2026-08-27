@@ -11,6 +11,7 @@ import {
   type DevicesError,
   getIdentity,
   type IdentityView,
+  type InvalidPaymentResponseError,
   isPollAbortedError,
   isPollDeadlineError,
   listActivity,
@@ -100,6 +101,9 @@ export type DeadlineCodeStaysLiteral = Assert<
 >;
 export type AbortedCodeStaysLiteral = Assert<
   Equal<PollAbortedError["code"], "POLL_ABORTED">
+>;
+export type InvalidPaymentCodeStaysLiteral = Assert<
+  Equal<InvalidPaymentResponseError["code"], "INVALID_PAYMENT_RESPONSE">
 >;
 export type PayVendorKindsStayExhaustive = Assert<
   Equal<

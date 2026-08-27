@@ -5,6 +5,7 @@ import {
 } from "./generated/sdk.gen.js";
 import type {
   PayPerUseError,
+  PayPerUseGetTransactionResponseBody,
   PayPerUseMoney,
   PayPerUsePayment,
   PayPerUsePayVendorRequest,
@@ -40,6 +41,41 @@ type PayAttempt =
       error: undefined;
     } & RequestFields)
   | ({ data: undefined; error: unknown } & RequestFields);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export class InvalidPaymentResponseError extends Error {
+  readonly body: unknown;
+  readonly code = "INVALID_PAYMENT_RESPONSE";
+  readonly status: number | undefined;
+
+  constructor(
+    kind: "payment" | "transaction",
+    body: unknown,
+    status: number | undefined,
+  ) {
+    super(
+      kind === "payment"
+        ? "A successful status carried no payment"
+        : "A successful status carried no transaction",
+    );
+    this.name = "InvalidPaymentResponseError";
+    this.body = body;
+    this.status = status;
+  }
+}
+
+export function isInvalidPaymentResponseError(
+  value: unknown,
+): value is InvalidPaymentResponseError {
+  return (
+    isRecord(value) &&
+    value.code === "INVALID_PAYMENT_RESPONSE" &&
+    Object.hasOwn(value, "body")
+  );
+}
 
 export type PayVendorResult =
   | {
@@ -110,7 +146,7 @@ export interface PayVendorSafelyOptions {
 }
 
 function isPayPerUseErrorEnvelope(value: unknown): value is PayPerUseError {
-  if (typeof value !== "object" || value === null || !("error" in value)) {
+  if (!isRecord(value) || !("error" in value)) {
     return false;
   }
   const error = value.error;
@@ -119,6 +155,46 @@ function isPayPerUseErrorEnvelope(value: unknown): value is PayPerUseError {
     error !== null &&
     "code" in error &&
     typeof error.code === "string"
+  );
+}
+
+function hasEnvelopeShape(
+  value: unknown,
+): value is { data: Record<string, unknown>; meta: object } {
+  return (
+    isRecord(value) &&
+    isRecord(value.data) &&
+    typeof value.meta === "object" &&
+    value.meta !== null
+  );
+}
+
+// Checks the fields this helper and its documented callers read.
+function hasLifecycleFields(data: Record<string, unknown>): boolean {
+  return (
+    typeof data.status === "string" &&
+    typeof data.terminal === "boolean" &&
+    typeof data.chargeIsFinal === "boolean"
+  );
+}
+
+function isPayPerUsePaymentEnvelope(
+  value: unknown,
+): value is PayPerUsePayVendorResponseBody {
+  return (
+    hasEnvelopeShape(value) &&
+    typeof value.data.transactionId === "string" &&
+    hasLifecycleFields(value.data)
+  );
+}
+
+function isPayPerUseTransactionEnvelope(
+  value: unknown,
+): value is PayPerUseGetTransactionResponseBody {
+  return (
+    hasEnvelopeShape(value) &&
+    typeof value.data.id === "string" &&
+    hasLifecycleFields(value.data)
   );
 }
 
@@ -156,7 +232,11 @@ function clampServerDelay(delayMs: number): number {
 
 function pollDelayMs(view: PayPerUsePayment): number | undefined {
   const afterMs = view.poll?.afterMs;
-  return afterMs === undefined ? undefined : clampServerDelay(afterMs);
+  // Reject invalid hints so they cannot create a 1 ms retry loop.
+  if (typeof afterMs !== "number" || !Number.isFinite(afterMs) || afterMs < 0) {
+    return;
+  }
+  return clampServerDelay(afterMs);
 }
 
 function retryAfterMs(response: Response | undefined): number | undefined {
@@ -283,7 +363,7 @@ async function recoverTransaction(options: {
     );
     lastFields = read;
 
-    if (read.error === undefined && read.data !== undefined) {
+    if (read.error === undefined && isPayPerUseTransactionEnvelope(read.data)) {
       const transaction = read.data.data;
       if (transaction.terminal) {
         return withFields(
@@ -296,6 +376,12 @@ async function recoverTransaction(options: {
         );
       }
       lastError = transaction;
+    } else if (read.error === undefined) {
+      lastError = new InvalidPaymentResponseError(
+        "transaction",
+        read.data,
+        read.response?.status,
+      );
     } else {
       lastError = read.error;
       if (options.signal?.aborted) {
@@ -305,7 +391,7 @@ async function recoverTransaction(options: {
       if (
         status !== undefined &&
         status !== 429 &&
-        (status < 500 || status >= 600)
+        ((status >= 400 && status < 500) || status >= 600)
       ) {
         return unknown(lastError, read);
       }
@@ -328,7 +414,10 @@ async function recoverTransaction(options: {
 /**
  * Pays a vendor with one idempotency key, bounded same-key replays, and bounded
  * transaction recovery. A successful pay response returns `settled` or
- * `confirmation_required`; an identified terminal transaction returns
+ * `confirmation_required`. `confirmation_required` means nothing has been
+ * charged yet and the payment is waiting on its second check; complete it with
+ * `payPerUseConfirmPayment` using `data.data.transactionId` and the instructions
+ * in `data.data.confirmation`. An identified terminal transaction returns
  * `recovered`; an unresolved delivered outcome returns `unknown`. A recovered
  * result carries money state only: the transaction view has no vendor output,
  * so vendor output is not recoverable after a lost response. A recovered
@@ -337,33 +426,56 @@ async function recoverTransaction(options: {
  *
  * The helper replays the same key on an open payment (`indeterminate`, `queued`,
  * or `running`), a retry-safe 503, any other 5xx or 429 response, a transport
- * failure, or an attempt timeout. An open payment's `poll.afterMs` is honored,
+ * failure, or an attempt timeout. A response that carries no payment — a
+ * success that is not a payment, or a redirect — is replayed under the same
+ * key, or read when a transaction identifier is already known, and ends as
+ * `unknown` if it never resolves; unlike an undelivered response, it does not
+ * mean nothing was charged. An open payment's `poll.afterMs` is honored,
  * clamped to 60 seconds. Any error envelope carrying a transaction identifier
  * starts bounded reads until the transaction is terminal. It never creates a
  * second key during one call. `settled` means the pay call returned a terminal
  * payment view: read `data.data.status` and `chargeIsFinal`, because `failed`,
- * `expired`, `canceled`, and `reversed` are terminal too.
+ * `expired`, `canceled`, and `reversed` are terminal too. When a successful
+ * status carried no payment or no transaction, `lastError` is the client's
+ * decode error or an `InvalidPaymentResponseError` whose `body` and `status`
+ * are what arrived; every other `unknown` keeps the last server envelope,
+ * transport error, deadline error, or non-terminal transaction view it saw.
  *
  * Refused 4xx outcomes and a run exhausted entirely by undelivered retry-safe
- * 503 responses are returned as ordinary error fields and mean nothing was
- * charged. A caller intending to reuse a key after a refusal must supply
- * `idempotencyKey` because a generated key is returned only on data results.
+ * 503 responses are returned as ordinary error fields unless the call was
+ * aborted first, in which case the outcome is `PollAbortedError` and the refusal
+ * survives only as `response.status`; a refusal charges nothing unless its code
+ * reports a payment already in flight. The helper reads the transaction such a
+ * refusal names, so one that reaches you as an error field names none: reconcile
+ * it by reading recent transactions before paying again or, after one the helper
+ * had already identified, by reading that transaction; supply `idempotencyKey`
+ * yourself when you may need to reuse a key after a refusal, because a generated
+ * key is returned only on data results.
  * The same key may be retried only with an identical body; a changed body or a
  * new purchase needs a new key.
+ *
  * `request` and `response` on settled and confirmation results come from the
  * pay attempt, on recovered results from the final read, and on unknown results
- * from the last attempt or read when available. An aborted call returns
- * `PollAbortedError` whose `lastValue` is the payment identifier when one was
- * seen.
+ * from the last attempt or read when available. A caller abort returns
+ * `PollAbortedError` unless a terminal result had already landed — a `settled`,
+ * `confirmation_required`, or `recovered` result is returned even when the
+ * signal aborted in the same turn; narrow it with `isPollAbortedError` and read
+ * `lastValue` for the payment identifier when one was seen; the outcome also
+ * carries the last attempt's or read's `request` and `response` when one was
+ * made.
  *
  * The helper is bounded in attempts. With defaults, no server-supplied waits,
  * and no `deadlineMs`, the worst-case wall time is about 227 seconds: four
  * 40-second attempts, 1 + 2 + 4 seconds of backoff, and 60 seconds of
  * transaction reads. A `Retry-After` on a 429 or a `poll.afterMs` on an open
  * view can each add up to 60 seconds per replay; `deadlineMs` is the only
- * overall wall-clock bound. When no key is supplied, this helper calls
- * `globalThis.crypto.randomUUID()` once; Node.js 22.18 or later and workerd
- * provide that API.
+ * overall wall-clock bound. Every same-key replay has to land inside the
+ * idempotency replay window that `GET /v1/identity` publishes as
+ * `idempotency_replay_window_seconds`; the helper's bounded wall time is designed
+ * to keep it there, and `deadlineMs` is the bound to lower when you need a
+ * tighter one.
+ * When no key is supplied, this helper calls `globalThis.crypto.randomUUID()`
+ * once; Node.js 22.18 or later and workerd provide that API.
  */
 export async function payVendorSafely(
   options: PayVendorSafelyOptions,
@@ -428,6 +540,31 @@ export async function payVendorSafely(
     );
   };
 
+  const recover = (fields: RequestFields, transactionId: string) =>
+    recoverTransaction({
+      client: options.client,
+      deadlineAt,
+      deadlineMs: options.deadlineMs,
+      idempotencyKey,
+      payFields: fields,
+      readIntervalMs,
+      readTimeoutMs,
+      signal: options.signal,
+      transactionId,
+    });
+
+  const ambiguous = (
+    result: PayAttempt,
+  ): PayVendorOutcome | Promise<PayVendorOutcome> | undefined => {
+    sawUndelivered503Only = false;
+    if (options.signal?.aborted) {
+      return abortedOutcome(options.signal, result, latestTransactionId);
+    }
+    if (latestTransactionId !== undefined) {
+      return recover(result, latestTransactionId);
+    }
+  };
+
   if (options.signal?.aborted) {
     return abortedOutcome(options.signal);
   }
@@ -470,12 +607,16 @@ export async function payVendorSafely(
     lastAttempt = result;
     lastError = result.error === undefined ? result.data : result.error;
 
-    if (result.error === undefined && result.data !== undefined) {
+    if (result.error === undefined && isPayPerUsePaymentEnvelope(result.data)) {
       const view = result.data.data;
       latestTransactionId = view.transactionId;
+      // Checked before the 202 branch: an indeterminate view is never a confirmation prompt.
       if (view.status === "indeterminate") {
         nextDelayMs = pollDelayMs(view);
         sawUndelivered503Only = false;
+        if (options.signal?.aborted) {
+          return abortedOutcome(options.signal, result, latestTransactionId);
+        }
         continue;
       }
       if (
@@ -494,12 +635,32 @@ export async function payVendorSafely(
       if (!view.terminal) {
         nextDelayMs = pollDelayMs(view);
         sawUndelivered503Only = false;
+        if (options.signal?.aborted) {
+          return abortedOutcome(options.signal, result, latestTransactionId);
+        }
         continue;
       }
       return withFields(
         { kind: "settled", data: result.data, idempotencyKey },
         result,
       );
+    }
+
+    if (result.error === undefined) {
+      const transactionId = result.data?.data?.transactionId;
+      if (typeof transactionId === "string") {
+        latestTransactionId = transactionId;
+      }
+      lastError = new InvalidPaymentResponseError(
+        "payment",
+        result.data,
+        result.response?.status,
+      );
+      const outcome = ambiguous(result);
+      if (outcome !== undefined) {
+        return outcome;
+      }
+      continue;
     }
 
     if (result.response === undefined) {
@@ -516,17 +677,12 @@ export async function payVendorSafely(
     const transactionId = envelope?.error.details?.transactionId;
     if (typeof transactionId === "string") {
       latestTransactionId = transactionId;
-      return recoverTransaction({
-        client: options.client,
-        deadlineAt,
-        deadlineMs: options.deadlineMs,
-        idempotencyKey,
-        payFields: result,
-        readIntervalMs,
-        readTimeoutMs,
-        signal: options.signal,
-        transactionId,
-      });
+    }
+    if (options.signal?.aborted) {
+      return abortedOutcome(options.signal, result, latestTransactionId);
+    }
+    if (typeof transactionId === "string") {
+      return recover(result, transactionId);
     }
 
     if (
@@ -548,7 +704,15 @@ export async function payVendorSafely(
       continue;
     }
 
-    return result;
+    // Only a non-429 4xx refusal reaches this point.
+    if (result.response.status >= 400) {
+      return result;
+    }
+
+    const outcome = ambiguous(result);
+    if (outcome !== undefined) {
+      return outcome;
+    }
   }
 
   return unknown();

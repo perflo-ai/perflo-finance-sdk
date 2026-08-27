@@ -1047,7 +1047,7 @@ describe("idempotency key factory", () => {
     ]);
   });
 
-  it("attaches factory keys only to replay-safe pay mutations", async () => {
+  it("attaches factory keys to pay calls but not to other pay-per-use mutations", async () => {
     const idempotencyKeyFactory = vi.fn(() => "factory_pay_key");
     const mocked = mockFetch();
     const client = createPerfloClient({
