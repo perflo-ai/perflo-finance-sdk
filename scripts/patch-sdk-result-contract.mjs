@@ -266,27 +266,38 @@ function patchSdk(source, expectedOperations) {
     const closingBrace = object.getEnd() - 1;
     const lineStart = patched.lastIndexOf("\n", closingBrace - 1) + 1;
     const closingIndent = patched.slice(lineStart, closingBrace);
-    if (!/^\s*$/u.test(closingIndent)) {
-      throw new TypeError(
-        `Generated operation ${name} object must close on its own line`,
-      );
-    }
     const previous = patched.slice(0, closingBrace).trimEnd().at(-1);
-    if (previous !== ",") {
-      throw new TypeError(
-        `Generated operation ${name} object must use trailing commas`,
-      );
+    if (/^\s*$/u.test(closingIndent)) {
+      if (previous !== ",") {
+        throw new TypeError(
+          `Generated operation ${name} object must use trailing commas`,
+        );
+      }
+      insertions.push({
+        end: closingBrace,
+        position: closingBrace,
+        text: `  parseAs: "json",\n${closingIndent}  responseStyle: "fields",\n${closingIndent}`,
+      });
+      continue;
     }
+    const objectStart = object.getStart(sourceFile);
+    const objectLinePrefix = patched.slice(lineStart, objectStart);
+    const objectIndent = objectLinePrefix.match(/^\s*/u)?.[0] ?? "";
+    const propertyIndent = `${objectIndent}  `;
+    const properties = object.properties.map((property) =>
+      property.getText(sourceFile),
+    );
     insertions.push({
-      position: closingBrace,
-      text: `  parseAs: "json",\n${closingIndent}  responseStyle: "fields",\n${closingIndent}`,
+      end: object.getEnd(),
+      position: objectStart,
+      text: `{\n${propertyIndent}${properties.join(`,\n${propertyIndent}`)},\n${propertyIndent}parseAs: "json",\n${propertyIndent}responseStyle: "fields",\n${objectIndent}}`,
     });
   }
 
   for (const insertion of insertions.sort(
     (left, right) => right.position - left.position,
   )) {
-    patched = `${patched.slice(0, insertion.position)}${insertion.text}${patched.slice(insertion.position)}`;
+    patched = `${patched.slice(0, insertion.position)}${insertion.text}${patched.slice(insertion.end)}`;
   }
   return patched;
 }

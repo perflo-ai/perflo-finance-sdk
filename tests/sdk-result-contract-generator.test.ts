@@ -40,6 +40,13 @@ export const getWidget = <ThrowOnError extends boolean = false>(
     ...options,
   });
 `;
+const singleLineSdkSource = sdkSource.replace(
+  `{
+    url: "/widgets/{widget_id}",
+    ...options,
+  }`,
+  `{ url: "/widgets/{widget_id}", ...options }`,
+);
 const clientSource = `if (
           response.status === 204 ||
           response.headers.get("Content-Length") === "0"
@@ -152,6 +159,23 @@ describe("SDK result contract patch", () => {
     expect(firstClient).not.toContain("data = text ? JSON.parse(text) : {};");
     expect(firstClientTypes).toContain("_TError = unknown");
     expect(firstClientTypes).toContain("error: unknown;");
+  });
+
+  it("forces JSON field results in a single-line client-call object", async () => {
+    const fixture = await createFixture();
+    await writeFile(fixture.sdkPath, singleLineSdkSource);
+
+    await runPatch(fixture);
+    const patchedSdk = await readFile(fixture.sdkPath, "utf8");
+
+    expect(patchedSdk).toContain(
+      `>({
+    url: "/widgets/{widget_id}",
+    ...options,
+    parseAs: "json",
+    responseStyle: "fields",
+  });`,
+    );
   });
 
   it("rejects an OpenAPI and generated SDK operation mismatch", async () => {
