@@ -107,6 +107,11 @@ describe("SDK reference generator", () => {
     const domainCounts = {
       Accounts: 4,
       Activity: 1,
+      "Agent account": 7,
+      "Agent discovery": 5,
+      "Agent keys": 7,
+      "Agent payments": 2,
+      "Agent resources": 2,
       Beneficiaries: 8,
       Cards: 16,
       Identity: 3,
@@ -121,10 +126,10 @@ describe("SDK reference generator", () => {
       Webhooks: 3,
     };
 
-    expect(rows).toHaveLength(77);
-    expect(new Set(functionNames).size).toBe(77);
-    expect(page.match(/^### /gmu)).toHaveLength(14);
-    expect(result.stdout).toContain("77 operations across 14 domains");
+    expect(rows).toHaveLength(100);
+    expect(new Set(functionNames).size).toBe(100);
+    expect(page.match(/^### /gmu)).toHaveLength(19);
+    expect(result.stdout).toContain("100 operations across 19 domains");
     expect(
       page.startsWith(`<p>Before the generated region.</p>\n${startMarker}\n`),
     ).toBe(true);
@@ -195,6 +200,9 @@ describe("SDK reference generator", () => {
     expect(operationRow(page, "createCardWithdrawal")).toContain(
       "`CreateCardWithdrawalData`<br />`CreateCardWithdrawalResponse` / `CreateCardWithdrawalResponses`<br />`CreateCardWithdrawalError` / `CreateCardWithdrawalErrors`",
     );
+    expect(operationRow(page, "agentDeleteSubAccounts")).toContain(
+      "`AgentDeleteSubAccountsData`<br />`unknown`<br />`AgentDeleteSubAccountsError` / `AgentDeleteSubAccountsErrors`",
+    );
   });
 
   it("renders the effective OpenAPI authentication policy", async () => {
@@ -205,7 +213,7 @@ describe("SDK reference generator", () => {
       row.includes("| Public |"),
     );
 
-    expect(publicRows).toHaveLength(6);
+    expect(publicRows).toHaveLength(9);
     expect(
       publicRows.map((row) => row.match(/^\| `([^`]+)`/u)?.[1]).sort(),
     ).toEqual(
@@ -213,6 +221,9 @@ describe("SDK reference generator", () => {
         "pollDevice",
         "pollSign",
         "startDevice",
+        "agentGetCapability",
+        "agentGetVendor",
+        "agentListCapabilities",
         "refreshToken",
         "redeemConnectCode",
         "publicConfig",
@@ -220,7 +231,7 @@ describe("SDK reference generator", () => {
     );
     expect(
       operationRows(page).filter((row) => row.includes("| Bearer |")),
-    ).toHaveLength(71);
+    ).toHaveLength(91);
   });
 
   it("escapes MDX-sensitive OpenAPI text", async () => {
@@ -300,6 +311,7 @@ describe("SDK reference generator", () => {
     document.paths["/v1/test-only"] = {
       get: {
         operationId: "test_only",
+        responses: { 200: { description: "OK" } },
         security: [{ BearerAuth: [] }],
         summary: "Test only",
         tags: ["Accounts"],
@@ -329,6 +341,18 @@ describe("SDK reference generator", () => {
       stderr: expect.stringContaining(
         "Duplicate generated SDK operation: GET /v1/accounts",
       ),
+    });
+  });
+
+  it("rejects an OpenAPI operation without responses", async () => {
+    const fixture = await createFixture();
+    const openApiPath = resolve(fixture.directory, "openapi.json");
+    const document = JSON.parse(await readFile(openApiPath, "utf8"));
+    delete document.paths["/v1/accounts"].get.responses;
+    await writeFile(openApiPath, JSON.stringify(document));
+
+    await expect(runGenerator(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining("must have responses"),
     });
   });
 

@@ -4,6 +4,10 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+- Added 23 agent-mode operations across the generated `Agent discovery`,
+  `Agent payments`, `Agent account`, `Agent keys`, and `Agent resources` domains,
+  including `agentListCapabilities`, `agentPayVendor`, `agentCreateSubAccount`,
+  `agentCreateKey`, and `agentListResources` (additive)
 - Added `createAccount` for confirmed idempotent fiat account provisioning and
   `accountEndorsement` for the restricted endorsement projection. Account
   provisioning returns a tracked operation. Read-only reconciliation requires

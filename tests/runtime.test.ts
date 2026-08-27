@@ -2,6 +2,9 @@ import { createServer } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 import type { ProblemDetails } from "../src/index.js";
 import {
+  agentGetCapability,
+  agentGetVendor,
+  agentListCapabilities,
   createPerfloClient,
   createPurchase,
   createPurchaseQuote,
@@ -15,6 +18,7 @@ import {
   isSubmissionUncertain,
   PERFLO_API_ORIGIN,
   pollDevice,
+  pollSign,
   publicConfig,
   redeemConnectCode,
   refreshAgentToken,
@@ -1202,7 +1206,7 @@ describe("submission uncertainty helpers", () => {
 });
 
 describe("generated operations", () => {
-  it("never authenticates any of the five public operations", async () => {
+  it("never authenticates any of the nine public operations", async () => {
     const mocked = mockFetch();
     const client = createPerfloClient({
       fetch: mocked.fetch,
@@ -1210,6 +1214,7 @@ describe("generated operations", () => {
     });
 
     await pollDevice({ body: { sid: "device_session" }, client });
+    await pollSign({ body: { sid: "sign_session" }, client });
     await startDevice({
       body: { clientName: "backend", deviceName: "server" },
       client,
@@ -1220,8 +1225,11 @@ describe("generated operations", () => {
       client,
     });
     await publicConfig({ client });
+    await agentListCapabilities({ client });
+    await agentGetCapability({ client, path: { slug: "capability" } });
+    await agentGetVendor({ client, path: { slug: "vendor" } });
 
-    expect(mocked.requests).toHaveLength(5);
+    expect(mocked.requests).toHaveLength(9);
     for (const request of mocked.requests) {
       expect(request.headers.has("Authorization")).toBe(false);
     }

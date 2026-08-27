@@ -74,6 +74,13 @@ function identifierTypeName(node, context) {
   return name;
 }
 
+function responseTypeName(node, context) {
+  if (node.kind === ts.SyntaxKind.UnknownKeyword) {
+    return "unknown";
+  }
+  return identifierTypeName(node, context);
+}
+
 function operationName(operationId) {
   const name = operationId.replace(/[-_]+([A-Za-z0-9])/gu, (_, character) =>
     character.toUpperCase(),
@@ -219,6 +226,11 @@ export function extractOpenApiOperations(document) {
         throw new TypeError(`Duplicate OpenAPI operation: ${key}`);
       }
       operationKeys.add(key);
+      if (!isRecord(operation.responses)) {
+        throw new TypeError(
+          `OpenAPI operation ${operationLabel} must have responses`,
+        );
+      }
       const security = Object.hasOwn(operation, "security")
         ? operation.security
         : document.security;
@@ -226,6 +238,9 @@ export function extractOpenApiOperations(document) {
         authenticated: readAuthentication(document, security, operationLabel),
         domain,
         functionName: operationName(operation.operationId),
+        hasSuccessResponse: Object.keys(operation.responses).some((status) =>
+          /^2(?:\d{2}|XX)$/iu.test(status),
+        ),
         key,
         method: method.toUpperCase(),
         operationId: operation.operationId,
@@ -329,7 +344,7 @@ export function extractSdkOperations(filename, source) {
       ) {
         throw new TypeError(`${context} must return RequestResult`);
       }
-      const responsesType = identifierTypeName(
+      const responsesType = responseTypeName(
         returnType.typeArguments[0],
         `${context} response type`,
       );
@@ -362,7 +377,7 @@ export function extractSdkOperations(filename, source) {
           `${context} client call must have three type arguments`,
         );
       }
-      const callResponses = identifierTypeName(
+      const callResponses = responseTypeName(
         call.typeArguments[0],
         `${context} client response type`,
       );
@@ -532,8 +547,11 @@ export function extractOperationTypes(filename, source, sdkOperations) {
     const stem = operation.dataType.slice(0, -"Data".length);
     const expectedResponses = `${stem}Responses`;
     const expectedErrors = `${stem}Errors`;
+    const expectedResponseResult = operation.hasSuccessResponse
+      ? expectedResponses
+      : "unknown";
     if (
-      operation.responsesType !== expectedResponses ||
+      operation.responsesType !== expectedResponseResult ||
       operation.errorsType !== expectedErrors
     ) {
       throw new TypeError(
@@ -544,11 +562,12 @@ export function extractOperationTypes(filename, source, sdkOperations) {
     const errorType = `${stem}Error`;
     const requiredAliases = [
       operation.dataType,
-      operation.responsesType,
-      responseType,
       operation.errorsType,
       errorType,
     ];
+    if (operation.responsesType !== "unknown") {
+      requiredAliases.push(operation.responsesType, responseType);
+    }
     for (const name of requiredAliases) {
       if (!aliases.has(name)) {
         throw new TypeError(
@@ -556,19 +575,23 @@ export function extractOperationTypes(filename, source, sdkOperations) {
         );
       }
     }
-    const responses = aliases.get(operation.responsesType);
     const errors = aliases.get(operation.errorsType);
-    if (!ts.isTypeLiteralNode(responses.type)) {
-      throw new TypeError(`${operation.responsesType} must be an object type`);
-    }
     if (!ts.isTypeLiteralNode(errors.type)) {
       throw new TypeError(`${operation.errorsType} must be an object type`);
     }
-    validateIndexedAlias(
-      aliases.get(responseType),
-      operation.responsesType,
-      responseType,
-    );
+    if (operation.responsesType !== "unknown") {
+      const responses = aliases.get(operation.responsesType);
+      if (!ts.isTypeLiteralNode(responses.type)) {
+        throw new TypeError(
+          `${operation.responsesType} must be an object type`,
+        );
+      }
+      validateIndexedAlias(
+        aliases.get(responseType),
+        operation.responsesType,
+        responseType,
+      );
+    }
     validateIndexedAlias(
       aliases.get(errorType),
       operation.errorsType,
@@ -578,7 +601,8 @@ export function extractOperationTypes(filename, source, sdkOperations) {
       aliases.get(operation.dataType),
       operation,
     );
-    operation.responseType = responseType;
+    operation.responseType =
+      operation.responsesType === "unknown" ? "unknown" : responseType;
     operation.errorType = errorType;
   }
 }
@@ -711,9 +735,13 @@ function renderFunction(operation, aliases) {
 }
 
 function renderTypes(operation) {
+  const responseTypes =
+    operation.responseType === "unknown"
+      ? "`unknown`"
+      : `\`${operation.responseType}\` / \`${operation.responsesType}\``;
   return [
     `\`${operation.dataType}\``,
-    `\`${operation.responseType}\` / \`${operation.responsesType}\``,
+    responseTypes,
     `\`${operation.errorType}\` / \`${operation.errorsType}\``,
   ].join("<br />");
 }
