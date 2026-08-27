@@ -451,6 +451,7 @@ async function recoverTransaction(options: {
  * had already identified, by reading that transaction; supply `idempotencyKey`
  * yourself when you may need to reuse a key after a refusal, because a generated
  * key is returned only on data results.
+ *
  * The same key may be retried only with an identical body; a changed body or a
  * new purchase needs a new key.
  *
@@ -474,6 +475,7 @@ async function recoverTransaction(options: {
  * `idempotency_replay_window_seconds`; the helper's bounded wall time is designed
  * to keep it there, and `deadlineMs` is the bound to lower when you need a
  * tighter one.
+ *
  * When no key is supplied, this helper calls `globalThis.crypto.randomUUID()`
  * once; Node.js 22.18 or later and workerd provide that API.
  */
@@ -704,7 +706,8 @@ export async function payVendorSafely(
       continue;
     }
 
-    // Only a non-429 4xx refusal reaches this point.
+    // A non-429 4xx refusal is returned as an error field; any other delivered
+    // response (a 3xx, which this client never follows) is ambiguous and replays.
     if (result.response.status >= 400) {
       return result;
     }
