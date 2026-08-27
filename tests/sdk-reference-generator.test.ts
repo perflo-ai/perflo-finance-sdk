@@ -107,11 +107,6 @@ describe("SDK reference generator", () => {
     const domainCounts = {
       Accounts: 4,
       Activity: 1,
-      "Agent account": 7,
-      "Agent discovery": 5,
-      "Agent keys": 7,
-      "Agent payments": 2,
-      "Agent resources": 2,
       Beneficiaries: 8,
       Cards: 16,
       Identity: 3,
@@ -119,6 +114,11 @@ describe("SDK reference generator", () => {
       Mandates: 13,
       Onboarding: 4,
       Operations: 4,
+      "Pay per use: account and sub-accounts": 7,
+      "Pay per use: discovery": 5,
+      "Pay per use: keys": 7,
+      "Pay per use: payments": 4,
+      "Pay per use: resources": 2,
       "Perflo device tokens": 7,
       Services: 7,
       Spending: 3,
@@ -126,10 +126,10 @@ describe("SDK reference generator", () => {
       Webhooks: 3,
     };
 
-    expect(rows).toHaveLength(100);
-    expect(new Set(functionNames).size).toBe(100);
+    expect(rows).toHaveLength(102);
+    expect(new Set(functionNames).size).toBe(102);
     expect(page.match(/^### /gmu)).toHaveLength(19);
-    expect(result.stdout).toContain("100 operations across 19 domains");
+    expect(result.stdout).toContain("102 operations across 19 domains");
     expect(
       page.startsWith(`<p>Before the generated region.</p>\n${startMarker}\n`),
     ).toBe(true);
@@ -200,8 +200,10 @@ describe("SDK reference generator", () => {
     expect(operationRow(page, "createCardWithdrawal")).toContain(
       "`CreateCardWithdrawalData`<br />`CreateCardWithdrawalResponse` / `CreateCardWithdrawalResponses`<br />`CreateCardWithdrawalError` / `CreateCardWithdrawalErrors`",
     );
-    expect(operationRow(page, "agentDeleteSubAccounts")).toContain(
-      "`AgentDeleteSubAccountsData`<br />`unknown`<br />`AgentDeleteSubAccountsError` / `AgentDeleteSubAccountsErrors`",
+    expect(
+      operationRow(page, "payPerUseRejectBulkSubAccountDeletion"),
+    ).toContain(
+      "`PayPerUseRejectBulkSubAccountDeletionData`<br />`unknown`<br />`PayPerUseRejectBulkSubAccountDeletionError` / `PayPerUseRejectBulkSubAccountDeletionErrors`",
     );
   });
 
@@ -221,9 +223,9 @@ describe("SDK reference generator", () => {
         "pollDevice",
         "pollSign",
         "startDevice",
-        "agentGetCapability",
-        "agentGetVendor",
-        "agentListCapabilities",
+        "payPerUseGetCapability",
+        "payPerUseGetVendor",
+        "payPerUseListCapabilities",
         "refreshToken",
         "redeemConnectCode",
         "publicConfig",
@@ -231,7 +233,7 @@ describe("SDK reference generator", () => {
     );
     expect(
       operationRows(page).filter((row) => row.includes("| Bearer |")),
-    ).toHaveLength(91);
+    ).toHaveLength(93);
   });
 
   it("escapes MDX-sensitive OpenAPI text", async () => {

@@ -54,8 +54,8 @@ function fixtureOpenapi() {
       ),
       "/v1/capabilities/{slug}": {
         get: {
-          operationId: "agent_get_capability",
-          responses: { 404: response("AgentModeError") },
+          operationId: "pay_per_use_get_capability",
+          responses: { 404: response("PayPerUseError") },
         },
       },
     },
@@ -67,14 +67,14 @@ function fixtureTypes() {
     ...cliOperations.map(
       ([, typeName]) => `export type ${typeName} = {
   401: CliErrorResponse;
-  404: AgentModeError;
+  404: PayPerUseError;
 };`,
     ),
-    `export type AgentGetCapabilityErrors = {
-  404: AgentModeError;
+    `export type PayPerUseGetCapabilityErrors = {
+  404: PayPerUseError;
 };`,
     `export type UnaffectedErrors = {
-  404: AgentModeError;
+  404: PayPerUseError;
 };`,
   ].join("\n\n");
 }
@@ -121,21 +121,21 @@ describe("mixed-content error union patch", () => {
     for (const [, typeName] of cliOperations) {
       expect(source).toContain(`export type ${typeName} = {
   401: CliErrorResponse | ProblemDetails;
-  404: AgentModeError;
+  404: PayPerUseError;
 };`);
     }
-    expect(source).toContain(`export type AgentGetCapabilityErrors = {
-  404: AgentModeError | ProblemDetails;
+    expect(source).toContain(`export type PayPerUseGetCapabilityErrors = {
+  404: PayPerUseError | ProblemDetails;
 };`);
     expect(source).toContain(`export type UnaffectedErrors = {
-  404: AgentModeError;
+  404: PayPerUseError;
 };`);
   });
 
   it("rejects a missing generated declaration", async () => {
     const fixture = await createFixture((source) =>
       source.replace(
-        /export type AgentGetCapabilityErrors = \{[\s\S]*?\n\};\n\n/,
+        /export type PayPerUseGetCapabilityErrors = \{[\s\S]*?\n\};\n\n/,
         "",
       ),
     );
@@ -144,7 +144,7 @@ describe("mixed-content error union patch", () => {
       runPatch(fixture.outputDirectory, fixture.openapiPath),
     ).rejects.toMatchObject({
       stderr: expect.stringContaining(
-        "Missing generated AgentGetCapabilityErrors declaration",
+        "Missing generated PayPerUseGetCapabilityErrors declaration",
       ),
     });
   });
@@ -152,8 +152,8 @@ describe("mixed-content error union patch", () => {
   it("rejects an unexpected generated type at a mapped status", async () => {
     const fixture = await createFixture((source) =>
       source.replace(
-        "export type AgentGetCapabilityErrors = {\n  404: AgentModeError;",
-        "export type AgentGetCapabilityErrors = {\n  404: ValidationError;",
+        "export type PayPerUseGetCapabilityErrors = {\n  404: PayPerUseError;",
+        "export type PayPerUseGetCapabilityErrors = {\n  404: ValidationError;",
       ),
     );
 
@@ -161,7 +161,7 @@ describe("mixed-content error union patch", () => {
       runPatch(fixture.outputDirectory, fixture.openapiPath),
     ).rejects.toMatchObject({
       stderr: expect.stringContaining(
-        "Generated AgentGetCapabilityErrors status 404 has unexpected type ValidationError",
+        "Generated PayPerUseGetCapabilityErrors status 404 has unexpected type ValidationError",
       ),
     });
   });

@@ -7,8 +7,8 @@ Use `@perflo/finance-sdk` from Node.js, browsers, or Cloudflare Workers to call 
 Set the release location once in your shell:
 
 ```bash
-sdk_version="v0.1.0-beta.13"
-sdk_archive="perflo-finance-sdk-0.1.0-beta.13.tgz"
+sdk_version="v0.1.0-beta.15"
+sdk_archive="perflo-finance-sdk-0.1.0-beta.15.tgz"
 sdk_releases="https://github.com/perflo-ai/perflo-finance-sdk/releases"
 ```
 
@@ -66,9 +66,9 @@ If `token` is a callback that resolves to a `pfa_` token, the SDK resolves it fo
 
 ## Protect financial mutations
 
-Persist the exact body, confirmation intent ID, and idempotency key before a financial write. The SDK never creates keys for purchases, transfers, or other financial mutations. Callers own those keys, especially after a `submission_uncertain` result.
+Persist the exact body, confirmation intent ID, and idempotency key before a financial write. The SDK creates a key only for purchase quotes and `POST /v1/pay/{slug}` through `idempotencyKeyFactory`, and inside `payVendorSafely`, which owns one key per call and returns it on every data branch. Callers own the keys for transfers and purchases, especially after a `submission_uncertain` result.
 
-Purchase quotes are the only exception. Configure `idempotencyKeyFactory` to supply a key when `createPurchaseQuote` has no caller-provided `Idempotency-Key`:
+Purchase quotes and pay-per-use vendor payments are the exceptions. Configure `idempotencyKeyFactory` to supply a key when `createPurchaseQuote` or `payPerUsePayVendor` has no caller-provided `Idempotency-Key`:
 
 ```typescript
 const agent_client = createPerfloClient({
@@ -77,7 +77,7 @@ const agent_client = createPerfloClient({
 });
 ```
 
-The factory runs only for `POST /v1/purchase-quotes`. It never overwrites a caller-provided quote key, and an automatic refresh retry reuses the first attempt's key.
+The factory runs only for `POST /v1/purchase-quotes` and `POST /v1/pay/{slug}` and must return a fresh value for every call; a constant would deduplicate distinct payments. It never overwrites a caller-provided key, and an automatic refresh retry reuses the first attempt's key. Supply the `Idempotency-Key` yourself, or use `payVendorSafely`, for a payment you may retry: a factory key is fresh for every request, so your own retry would start a second payment.
 
 Use the exported helpers to decide whether replacement is safe:
 
@@ -136,6 +136,20 @@ if (isPollDeadlineError<PurchaseView>(result.error)) {
 Both wrappers use the exported `pollUntil<T>` engine and `PollFields<T>` result type. The engine polls immediately, never overlaps reads, waits `intervalMs` after each completed non-terminal read, and measures `timeoutMs` from invocation. Both values must be finite and positive. The caller owns the interval, timeout, and optional cancellation signal. The engine passes a linked child signal to every read so cancellation and the deadline stop interval sleep and in-flight Fetch work.
 
 An ordinary read failure returns unchanged with its `request` and `response` fields. A deadline returns `PollDeadlineError<T>` with `code: "POLL_DEADLINE_EXCEEDED"`, the configured timeout, `outcomeMayStillChange: true`, and the last observed value when one exists. Caller cancellation returns `PollAbortedError<T>` with `code: "POLL_ABORTED"`, the caller's reason, and the last value when one exists. Use `isPollDeadlineError` and `isPollAbortedError` instead of `instanceof` so narrowing works across JavaScript realms. A deadline does not change or infer the resource's `submission_uncertain` field and never proves that a replacement write is safe.
+
+## Pay a vendor safely
+
+Use one call with bounded attempts when a pay-per-use payment may need a same-key replay or transaction recovery:
+
+```typescript
+const outcome = await payVendorSafely({
+  client,
+  slug,
+  body: { input, query, subAccountId, maxCharge },
+});
+```
+
+The data result is `settled`, `confirmation_required`, `recovered`, or `unknown`. `confirmation_required` means nothing has been charged yet and the payment is waiting on its second check. `settled` means the pay call returned a terminal payment view; inspect `data.data.status` and `chargeIsFinal`, because `failed`, `expired`, `canceled`, and `reversed` are terminal too. A recovered transaction carries money state only because a lost vendor response's output is not part of the transaction view. A recovered transaction is terminal but not necessarily successful; read `transaction.status` and `chargeIsFinal`. Refused `4xx` responses and a run exhausted entirely by undelivered retry-safe 503 responses return as ordinary error fields, with nothing charged. A caller that intends to reuse a key after a refusal must supply `idempotencyKey` because a generated key is returned only on data results. The same key may be retried only with an identical body; a changed body or a new purchase needs a new key. The helper creates or accepts one `Idempotency-Key`, returns it on every data result, and never creates a second key during the call. A caller abort returns `PollAbortedError`; narrow it with `isPollAbortedError` and read `lastValue` for the payment identifier when one was seen. The helper is bounded in attempts; with defaults, no server-supplied waits, and no `deadlineMs`, the worst-case wall time is about 227 seconds. A `Retry-After` on a `429` or a `poll.afterMs` on an open view can each add up to 60 seconds per replay; `deadlineMs` is the only overall wall-clock bound.
 
 ## Check a verification URL
 
