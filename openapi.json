@@ -4737,7 +4737,7 @@
           },
           "meta": {
             "$ref": "#/components/schemas/PayPerUseListTransactionsListMeta",
-            "description": "Pagination metadata."
+            "description": "Request metadata."
           }
         },
         "required": [
@@ -7308,7 +7308,7 @@
       },
       "SignedMoney": {
         "additionalProperties": false,
-        "description": "An amount of either sign and the currency it is denominated in.\n\nCard ledger entries carry direction in the amount's sign and have no kind\nfield to move it to, so this is the one signed money shape. The amount\ntravels as a decimal string rather than as a JSON number, so no precision is\nlost in transit.",
+        "description": "An amount of either sign and the currency it is denominated in.\n\nCard ledger entries carry direction in the amount's sign and have no kind\nfield to move it to. The amount travels as a decimal string rather than as a\nJSON number, so no precision is lost in transit.",
         "properties": {
           "amount": {
             "description": "The amount, carried as a decimal string, whose sign carries the direction: a debit is negative and a credit positive.",
@@ -14438,7 +14438,7 @@
     },
     "/v1/key": {
       "get": {
-        "description": "Get the calling agent key and its bound sub-account; JWT credentials are refused.",
+        "description": "Get the calling agent key and its bound sub-account. Only an agent key can read it.",
         "operationId": "pay_per_use_get_caller_agent_key",
         "responses": {
           "200": {

@@ -175,6 +175,14 @@ function unknownData(outcome: PayVendorOutcome) {
   return outcome.data;
 }
 
+function expectAborted(outcome: PayVendorOutcome, lastValue?: string) {
+  const { error } = outcome;
+  if (!isPollAbortedError(error)) {
+    throw new Error("Expected a PollAbortedError");
+  }
+  expect(error.lastValue).toBe(lastValue);
+}
+
 describe("payVendorSafely", () => {
   beforeEach(() => {
     vi.useFakeTimers({
@@ -1055,10 +1063,7 @@ describe("payVendorSafely", () => {
     backoffController.abort("stop");
     const aborted = await backoffPromise;
 
-    expect(isPollAbortedError(aborted.error)).toBe(true);
-    expect((aborted.error as { lastValue?: unknown }).lastValue).toBe(
-      "transaction_id",
-    );
+    expectAborted(aborted, "transaction_id");
     expect(aborted.request).toBeDefined();
     expect(aborted.request?.method).toBe(backingOff.requests[0]?.method);
     expect(aborted.request?.url).toBe(backingOff.requests[0]?.url);
@@ -1096,10 +1101,7 @@ describe("payVendorSafely", () => {
       signal: controller.signal,
     });
 
-    expect(isPollAbortedError(outcome.error)).toBe(true);
-    expect((outcome.error as { lastValue?: unknown }).lastValue).toBe(
-      "transaction_id",
-    );
+    expectAborted(outcome, "transaction_id");
     expect(outcome.request).toBeDefined();
     expect(outcome.response?.status).toBe(200);
     expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
@@ -1119,10 +1121,7 @@ describe("payVendorSafely", () => {
       signal: controller.signal,
     });
 
-    expect(isPollAbortedError(outcome.error)).toBe(true);
-    expect((outcome.error as { lastValue?: unknown }).lastValue).toBe(
-      "transaction_id",
-    );
+    expectAborted(outcome, "transaction_id");
     expect(outcome.request).toBeDefined();
     expect(outcome.response?.status).toBe(200);
     expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
@@ -1147,10 +1146,7 @@ describe("payVendorSafely", () => {
       signal: controller.signal,
     });
 
-    expect(isPollAbortedError(outcome.error)).toBe(true);
-    expect((outcome.error as { lastValue?: unknown }).lastValue).toBe(
-      "transaction_id",
-    );
+    expectAborted(outcome, "transaction_id");
     expect(outcome.request?.url.endsWith("/v1/pay/vendor")).toBe(true);
     expect(outcome.response?.status).toBe(500);
     expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
@@ -1170,10 +1166,7 @@ describe("payVendorSafely", () => {
       signal: controller.signal,
     });
 
-    expect(isPollAbortedError(outcome.error)).toBe(true);
-    expect(
-      (outcome.error as { lastValue?: unknown }).lastValue,
-    ).toBeUndefined();
+    expectAborted(outcome);
     expect(outcome.response?.status).toBe(500);
     expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
     expectNoTimers();
@@ -1192,10 +1185,7 @@ describe("payVendorSafely", () => {
       signal: controller.signal,
     });
 
-    expect(isPollAbortedError(outcome.error)).toBe(true);
-    expect(
-      (outcome.error as { lastValue?: unknown }).lastValue,
-    ).toBeUndefined();
+    expectAborted(outcome);
     expect(outcome.response?.status).toBe(422);
     expectSequence(mocked.requests, ["/v1/pay/vendor"], "same_key");
     expectNoTimers();
@@ -1236,10 +1226,7 @@ describe("payVendorSafely", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     const outcome = await promise;
 
-    expect(isPollAbortedError(outcome.error)).toBe(true);
-    expect((outcome.error as { lastValue?: unknown }).lastValue).toBe(
-      "transaction_id",
-    );
+    expectAborted(outcome, "transaction_id");
     expectSequence(
       mocked.requests,
       ["/v1/pay/vendor", "/v1/pay/vendor", "/v1/transactions/transaction_id"],

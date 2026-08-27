@@ -52,9 +52,8 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
   `PayPerUseGetTransactionResponseBody` (additive)
 - Added `payVendorSafely`, `PayVendorSafelyOptions`, `PayVendorOutcome`, and
   `PayVendorResult`: one single-key payment call with bounded attempts that
-  replays the same
-  `Idempotency-Key` on an open payment (`indeterminate`, `queued`, or
-  `running`), on `SERVICE_UNAVAILABLE` with `retrySafe: true`, on
+  replays the same `Idempotency-Key` on an open payment (`indeterminate`,
+  `queued`, or `running`), on `SERVICE_UNAVAILABLE` with `retrySafe: true`, on
   `OPERATION_OUTCOME_UNKNOWN` and other 5xx or 429 answers, on a transport
   failure or attempt timeout, and on a successful or redirect status that
   carries no payment; reads when a transaction identifier is already known,
