@@ -12,6 +12,7 @@ import type {
   PayPerUsePayVendorResponseBody,
   PayPerUseTransactionView,
 } from "./generated/types.gen.js";
+import { isRecord } from "./guards.js";
 import {
   now,
   PollAbortedError,
@@ -41,10 +42,6 @@ type PayAttempt =
       error: undefined;
     } & RequestFields)
   | ({ data: undefined; error: unknown } & RequestFields);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 export class InvalidPaymentResponseError extends Error {
   readonly body: unknown;
@@ -145,6 +142,12 @@ export interface PayVendorSafelyOptions {
   signal?: AbortSignal;
 }
 
+// The `in` checks differ from `Object.hasOwn` only for an inherited key (which passes) or a
+// Proxy whose `has` trap denies a real key (which rejects); a trap that claims a key cannot pass
+// on its own, because the reads that follow still need a real object with a string `code`.
+// This guard reads `result.error`, which is `JSON.parse` of the error body, so decoded server
+// JSON produces neither; only a caller-registered error interceptor could. The guard
+// deliberately does not defend against that trusted-input case.
 function isPayPerUseErrorEnvelope(value: unknown): value is PayPerUseError {
   if (!isRecord(value) || !("error" in value)) {
     return false;

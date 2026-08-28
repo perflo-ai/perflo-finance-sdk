@@ -1,10 +1,9 @@
 import type { PerfloClient } from "./client.js";
 import { getOperation, getPurchase } from "./generated/sdk.gen.js";
 import type { OperationView, PurchaseView } from "./generated/types.gen.js";
+import { isRecord } from "./guards.js";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
-
-type UnknownRecord = Record<PropertyKey, unknown>;
 
 export type PollFields<T> =
   | {
@@ -69,10 +68,6 @@ export class PollAbortedError<T = unknown> extends Error {
       this.lastValue = lastValue[0];
     }
   }
-}
-
-function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function isPollDeadlineError<T = unknown>(
