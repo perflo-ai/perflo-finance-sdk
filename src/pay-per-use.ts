@@ -691,7 +691,8 @@ export async function payVendorSafely(
       result.response.status === 503 &&
       envelope?.error.details?.retrySafe === true
     ) {
-      // The only continue that leaves sawUndelivered503Only true: a retry-safe 503 means the request was not delivered.
+      // The only continue that leaves sawUndelivered503Only true: a retry-safe
+      // 503 means the request was not delivered.
       continue;
     }
 
