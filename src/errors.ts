@@ -1,10 +1,5 @@
 import type { ProblemDetails } from "./generated/types.gen.js";
-
-type UnknownRecord = Record<PropertyKey, unknown>;
-
-function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import { isRecord, type UnknownRecord } from "./guards.js";
 
 export function isProblemDetails(value: unknown): value is ProblemDetails {
   if (!isRecord(value)) {
