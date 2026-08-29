@@ -1,11 +1,16 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import ts from "typescript";
+import { discoverOperations } from "./lib/generated-operations.mjs";
+import { requireOperations } from "./lib/openapi.mjs";
+import { objectPropertyName } from "./lib/typescript.mjs";
 
 const repositoryRoot = resolve(
   process.env.PERFLO_SDK_RESULT_CONTRACT_ROOT ?? ".",
 );
-const openApiPath = resolve(repositoryRoot, "openapi.json");
+const openApiPath = process.env.PERFLO_SDK_OPENAPI
+  ? resolve(process.env.PERFLO_SDK_OPENAPI)
+  : resolve(repositoryRoot, "openapi.json");
 const outputDirectory = resolve(
   repositoryRoot,
   process.env.PERFLO_SDK_OUTPUT ?? "src/generated",
@@ -13,16 +18,6 @@ const outputDirectory = resolve(
 const sdkPath = resolve(outputDirectory, "sdk.gen.ts");
 const clientPath = resolve(outputDirectory, "client/client.gen.ts");
 const clientTypesPath = resolve(outputDirectory, "client/types.gen.ts");
-const operationMethods = new Set([
-  "delete",
-  "get",
-  "head",
-  "options",
-  "patch",
-  "post",
-  "put",
-  "trace",
-]);
 
 const unpatchedSdkOptions = `export type Options<
   TData extends TDataShape = TDataShape,
@@ -66,119 +61,12 @@ export type Options<
   meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };`;
 
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasExportModifier(node) {
-  return node.modifiers?.some(
-    (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
-  );
-}
-
-function operationName(operationId) {
-  const name = operationId.replace(/[-_]+([A-Za-z0-9])/gu, (_, character) =>
-    character.toUpperCase(),
-  );
-  if (!/^[$A-Z_a-z][$\w]*$/u.test(name)) {
-    throw new TypeError(`Invalid OpenAPI operationId ${operationId}`);
+function openApiOperationRoutes(document) {
+  const routes = new Set();
+  for (const { route } of requireOperations(document)) {
+    routes.add(route);
   }
-  return name;
-}
-
-function openApiOperationNames(document) {
-  if (!isRecord(document) || !isRecord(document.paths)) {
-    throw new TypeError("OpenAPI paths must be an object");
-  }
-  const names = new Set();
-  for (const [path, pathItem] of Object.entries(document.paths)) {
-    if (!isRecord(pathItem)) {
-      throw new TypeError(`OpenAPI path item ${path} must be an object`);
-    }
-    for (const [method, operation] of Object.entries(pathItem)) {
-      if (!operationMethods.has(method)) {
-        continue;
-      }
-      if (!isRecord(operation) || typeof operation.operationId !== "string") {
-        throw new TypeError(
-          `OpenAPI ${method.toUpperCase()} ${path} needs operationId`,
-        );
-      }
-      const name = operationName(operation.operationId);
-      if (names.has(name)) {
-        throw new TypeError(`Duplicate OpenAPI operation ${name}`);
-      }
-      names.add(name);
-    }
-  }
-  if (names.size === 0) {
-    throw new TypeError("OpenAPI document has no operations");
-  }
-  return names;
-}
-
-function parseTypeScript(filename, source) {
-  const sourceFile = ts.createSourceFile(
-    filename,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-  const diagnostics = sourceFile.parseDiagnostics ?? [];
-  if (diagnostics.length > 0) {
-    const message = ts.flattenDiagnosticMessageText(
-      diagnostics[0].messageText,
-      "\n",
-    );
-    throw new TypeError(`Invalid TypeScript in ${filename}: ${message}`);
-  }
-  return sourceFile;
-}
-
-function objectPropertyName(property) {
-  if (
-    "name" in property &&
-    property.name !== undefined &&
-    (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
-  ) {
-    return property.name.text;
-  }
-  return undefined;
-}
-
-function operationCallObject(name, declaration) {
-  const initializer = declaration.initializer;
-  if (initializer === undefined || !ts.isArrowFunction(initializer)) {
-    throw new TypeError(
-      `Generated operation ${name} must be an arrow function`,
-    );
-  }
-  let expression = initializer.body;
-  while (ts.isParenthesizedExpression(expression)) {
-    expression = expression.expression;
-  }
-  if (!ts.isCallExpression(expression)) {
-    throw new TypeError(
-      `Generated operation ${name} must return a client call`,
-    );
-  }
-  const method = expression.expression;
-  if (
-    !ts.isPropertyAccessExpression(method) ||
-    !ts.isPropertyAccessExpression(method.expression) ||
-    !ts.isIdentifier(method.expression.expression) ||
-    method.expression.expression.text !== "options" ||
-    method.expression.name.text !== "client" ||
-    !operationMethods.has(method.name.text) ||
-    expression.arguments.length !== 1 ||
-    !ts.isObjectLiteralExpression(expression.arguments[0])
-  ) {
-    throw new TypeError(
-      `Generated operation ${name} has an invalid client call`,
-    );
-  }
-  return expression.arguments[0];
+  return routes;
 }
 
 function patchSdk(source, expectedOperations) {
@@ -188,39 +76,27 @@ function patchSdk(source, expectedOperations) {
     patchedSdkOptions,
     "operation Options type",
   );
-  const sourceFile = parseTypeScript(sdkPath, patched);
-  const declarations = new Map();
-  for (const statement of sourceFile.statements) {
-    if (!ts.isVariableStatement(statement) || !hasExportModifier(statement)) {
-      continue;
-    }
-    for (const declaration of statement.declarationList.declarations) {
-      if (
-        ts.isIdentifier(declaration.name) &&
-        expectedOperations.has(declaration.name.text)
-      ) {
-        if (declarations.has(declaration.name.text)) {
-          throw new TypeError(
-            `Duplicate generated operation ${declaration.name.text}`,
-          );
-        }
-        declarations.set(declaration.name.text, declaration);
-      }
-    }
-  }
+  const discovered = discoverOperations(sdkPath, patched);
 
   const missing = [...expectedOperations].filter(
-    (name) => !declarations.has(name),
+    (route) => !discovered.has(route),
   );
-  if (missing.length > 0 || declarations.size !== expectedOperations.size) {
+  if (missing.length > 0) {
     throw new TypeError(
-      `Generated SDK operation mismatch: expected ${expectedOperations.size}, found ${declarations.size}; missing ${missing.join(", ") || "none"}`,
+      `Generated SDK operation mismatch: expected ${expectedOperations.size}, found ${discovered.size}; missing ${missing.join(", ")}`,
+    );
+  }
+  const unexpected = [...discovered.keys()].filter(
+    (route) => !expectedOperations.has(route),
+  );
+  if (unexpected.length > 0) {
+    throw new TypeError(
+      `Generated SDK operation mismatch: expected ${expectedOperations.size}, found ${discovered.size}; unexpected ${unexpected.join(", ")}`,
     );
   }
 
   const insertions = [];
-  for (const [name, declaration] of declarations) {
-    const object = operationCallObject(name, declaration);
+  for (const { name, object, sourceFile } of discovered.values()) {
     const parseProperties = object.properties.filter(
       (property) => objectPropertyName(property) === "parseAs",
     );
@@ -371,7 +247,7 @@ function replaceInvariant(source, unpatched, patched, name) {
 }
 
 const document = JSON.parse(await readFile(openApiPath, "utf8"));
-const expectedOperations = openApiOperationNames(document);
+const expectedOperations = openApiOperationRoutes(document);
 const [sdkSource, clientSource, clientTypesSource] = await Promise.all([
   readFile(sdkPath, "utf8"),
   readFile(clientPath, "utf8"),

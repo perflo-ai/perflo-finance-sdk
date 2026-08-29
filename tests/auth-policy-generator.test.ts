@@ -83,6 +83,21 @@ describe("auth policy generator", () => {
     });
   });
 
+  it("rejects a malformed bearer scheme with no authenticated operation", async () => {
+    await expect(
+      runGenerator({
+        components: {
+          securitySchemes: { BearerAuth: { type: "apiKey" } },
+        },
+        paths: { "/anonymous": { get: {} } },
+      }),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "OpenAPI components.securitySchemes.BearerAuth must be an HTTP bearer scheme",
+      ),
+    });
+  });
+
   it("rejects path-item references instead of omitting their operations", async () => {
     await expect(
       runGenerator(
@@ -90,8 +105,14 @@ describe("auth policy generator", () => {
       ),
     ).rejects.toMatchObject({
       stderr: expect.stringContaining(
-        "Unsupported referenced OpenAPI path item",
+        "OpenAPI path item /referenced uses an unsupported reference; it must be resolved before generation",
       ),
+    });
+  });
+
+  it("rejects an OpenAPI document with no operations", async () => {
+    await expect(runGenerator(openApiDocument({}))).rejects.toMatchObject({
+      stderr: expect.stringContaining("OpenAPI document has no operations"),
     });
   });
 });

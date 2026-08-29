@@ -40,6 +40,14 @@ export const getWidget = <ThrowOnError extends boolean = false>(
     ...options,
   });
 `;
+const referencedSdkOperation = `export const getReferenced = <ThrowOnError extends boolean = false>(
+  options: Options<GetWidgetData, ThrowOnError>,
+): RequestResult<GetWidgetResponses, GetWidgetErrors, ThrowOnError> =>
+  options.client.get<GetWidgetResponses, GetWidgetErrors, ThrowOnError>({
+    url: "/referenced",
+    ...options,
+  });
+`;
 const singleLineSdkSource = sdkSource.replace(
   `{
     url: "/widgets/{widget_id}",
@@ -109,11 +117,12 @@ async function createFixture(): Promise<Fixture> {
   return { clientPath, clientTypesPath, directory, sdkPath };
 }
 
-async function runPatch(fixture: Fixture) {
+async function runPatch(fixture: Fixture, openApiPath?: string) {
   return execFileAsync(process.execPath, [patchPath], {
     env: {
       ...process.env,
       PERFLO_SDK_RESULT_CONTRACT_ROOT: fixture.directory,
+      ...(openApiPath === undefined ? {} : { PERFLO_SDK_OPENAPI: openApiPath }),
     },
   });
 }
@@ -163,6 +172,7 @@ describe("SDK result contract patch", () => {
 
   it("forces JSON field results in a single-line client-call object", async () => {
     const fixture = await createFixture();
+    expect(singleLineSdkSource).not.toBe(sdkSource);
     await writeFile(fixture.sdkPath, singleLineSdkSource);
 
     await runPatch(fixture);
@@ -175,6 +185,121 @@ describe("SDK result contract patch", () => {
     parseAs: "json",
     responseStyle: "fields",
   });`,
+    );
+  });
+
+  it("matches operations by route without reading operationId", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      resolve(fixture.directory, "openapi.json"),
+      JSON.stringify({
+        paths: {
+          "/widgets/{widget_id}": {
+            get: { operationId: "getURL" },
+          },
+        },
+      }),
+    );
+
+    await runPatch(fixture);
+
+    await expect(readFile(fixture.sdkPath, "utf8")).resolves.toContain(
+      '    parseAs: "json",\n    responseStyle: "fields",\n',
+    );
+  });
+
+  it("reads OpenAPI from PERFLO_SDK_OPENAPI without relocating generated inputs", async () => {
+    const fixture = await createFixture();
+    const rootOpenApiPath = resolve(fixture.directory, "openapi.json");
+    const overridePath = resolve(fixture.directory, "resolved-openapi.json");
+    await writeFile(overridePath, await readFile(rootOpenApiPath, "utf8"));
+    await writeFile(rootOpenApiPath, JSON.stringify({ paths: {} }));
+
+    await runPatch(fixture, overridePath);
+
+    await expect(readFile(fixture.sdkPath, "utf8")).resolves.toContain(
+      '    parseAs: "json",\n    responseStyle: "fields",\n',
+    );
+  });
+
+  it("rejects a non-object path item with its path", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      resolve(fixture.directory, "openapi.json"),
+      JSON.stringify({ paths: { "/widgets/{widget_id}": null } }),
+    );
+
+    await expect(runPatch(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "Invalid OpenAPI path item: /widgets/{widget_id}",
+      ),
+    });
+  });
+
+  it("rejects an OpenAPI document with no operations", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      resolve(fixture.directory, "openapi.json"),
+      JSON.stringify({ paths: {} }),
+    );
+
+    await expect(runPatch(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining("OpenAPI document has no operations"),
+    });
+  });
+
+  it("rejects a referenced path item beside an inline operation", async () => {
+    const fixture = await createFixture();
+    await Promise.all([
+      writeFile(
+        resolve(fixture.directory, "openapi.json"),
+        JSON.stringify({
+          paths: {
+            "/widgets/{widget_id}": {
+              get: { operationId: "get_widget" },
+            },
+            "/referenced": {
+              $ref: "#/components/pathItems/Referenced",
+            },
+          },
+        }),
+      ),
+      writeFile(fixture.sdkPath, `${sdkSource}\n${referencedSdkOperation}`),
+    ]);
+
+    await expect(runPatch(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "OpenAPI path item /referenced uses an unsupported reference; it must be resolved before generation",
+      ),
+    });
+  });
+
+  it("rejects a generated route missing from the OpenAPI traversal", async () => {
+    const fixture = await createFixture();
+    await writeFile(fixture.sdkPath, `${sdkSource}\n${referencedSdkOperation}`);
+
+    await expect(runPatch(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "Generated SDK operation mismatch: expected 1, found 2; unexpected GET /referenced",
+      ),
+    });
+  });
+
+  it("skips generated SDK exports that are not operations", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      fixture.sdkPath,
+      `${sdkSource}\nexport const supportedMediaTypes = ["application/json"];\n`,
+    );
+
+    await runPatch(fixture);
+
+    const patchedSdk = await readFile(fixture.sdkPath, "utf8");
+    expect(patchedSdk).toContain(
+      '    parseAs: "json",\n    responseStyle: "fields",\n',
+    );
+    expect(patchedSdk).toContain(
+      'export const supportedMediaTypes = ["application/json"];',
     );
   });
 
