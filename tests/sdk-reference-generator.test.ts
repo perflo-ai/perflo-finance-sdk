@@ -48,9 +48,20 @@ async function createFixture(page = canonicalPage): Promise<Fixture> {
   return { directory, pagePath };
 }
 
+async function mutateOpenApi(
+  fixture: Fixture,
+  mutate: (document: ReturnType<typeof JSON.parse>) => void,
+) {
+  const openApiPath = resolve(fixture.directory, "openapi.json");
+  const document = JSON.parse(await readFile(openApiPath, "utf8"));
+  mutate(document);
+  await writeFile(openApiPath, JSON.stringify(document));
+}
+
 async function runGenerator(
   fixture: Fixture,
   mode: "--check" | "--write" = "--write",
+  openApiPath?: string,
 ) {
   return execFileAsync(
     process.execPath,
@@ -59,6 +70,9 @@ async function runGenerator(
       env: {
         ...process.env,
         PERFLO_SDK_REFERENCE_ROOT: fixture.directory,
+        ...(openApiPath === undefined
+          ? {}
+          : { PERFLO_SDK_OPENAPI: openApiPath }),
       },
     },
   );
@@ -72,6 +86,24 @@ async function replaceExactly(
   const source = await readFile(path, "utf8");
   expect(source.split(original)).toHaveLength(2);
   await writeFile(path, source.replace(original, replacement));
+}
+
+async function appendAccountsOperation(
+  fixture: Fixture,
+  functionName: string,
+  path = "/v1/accounts",
+) {
+  const sdkPath = resolve(fixture.directory, "src/generated/sdk.gen.ts");
+  const source = await readFile(sdkPath, "utf8");
+  const start = source.indexOf("export const accounts =");
+  const end = source.indexOf("/**", start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const declaration = source
+    .slice(start, end)
+    .replace("export const accounts =", `export const ${functionName} =`)
+    .replace('url: "/v1/accounts"', `url: ${JSON.stringify(path)}`);
+  await writeFile(sdkPath, `${source}\n${declaration}`);
 }
 
 function operationRows(source: string): Array<string> {
@@ -238,27 +270,26 @@ describe("SDK reference generator", () => {
 
   it("escapes MDX-sensitive OpenAPI text", async () => {
     const fixture = await createFixture();
-    const openApiPath = resolve(fixture.directory, "openapi.json");
-    const document = JSON.parse(await readFile(openApiPath, "utf8"));
     const originalDomain = "Accounts";
     const escapedDomain = "Accounts & {funds} <details> `lookup` | values";
-    const tag = document.tags.find(
-      (candidate: { name?: string }) => candidate.name === originalDomain,
-    );
-    expect(tag).toBeDefined();
-    tag.name = escapedDomain;
-    for (const pathItem of Object.values(document.paths) as Array<
-      Record<string, { tags?: Array<string> }>
-    >) {
-      for (const operation of Object.values(pathItem)) {
-        if (operation.tags?.[0] === originalDomain) {
-          operation.tags = [escapedDomain];
+    await mutateOpenApi(fixture, (document) => {
+      const tag = document.tags.find(
+        (candidate: { name?: string }) => candidate.name === originalDomain,
+      );
+      expect(tag).toBeDefined();
+      tag.name = escapedDomain;
+      for (const pathItem of Object.values(document.paths) as Array<
+        Record<string, { tags?: Array<string> }>
+      >) {
+        for (const operation of Object.values(pathItem)) {
+          if (operation.tags?.[0] === originalDomain) {
+            operation.tags = [escapedDomain];
+          }
         }
       }
-    }
-    document.paths["/v1/accounts"].get.summary =
-      "Read {account}\n<details> & `quoted` | row";
-    await writeFile(openApiPath, JSON.stringify(document));
+      document.paths["/v1/accounts"].get.summary =
+        "Read {account}\n<details> & `quoted` | row";
+    });
 
     await runGenerator(fixture);
     const page = await readFile(fixture.pagePath, "utf8");
@@ -277,6 +308,20 @@ describe("SDK reference generator", () => {
 
     await expect(runGenerator(fixture, "--check")).resolves.toMatchObject({
       stdout: expect.stringContaining("reference check passed"),
+    });
+  });
+
+  it("reads OpenAPI from PERFLO_SDK_OPENAPI without relocating other inputs", async () => {
+    const fixture = await createFixture();
+    const rootOpenApiPath = resolve(fixture.directory, "openapi.json");
+    const overridePath = resolve(fixture.directory, "resolved-openapi.json");
+    await writeFile(overridePath, await readFile(rootOpenApiPath, "utf8"));
+    await writeFile(rootOpenApiPath, "{}");
+
+    await expect(
+      runGenerator(fixture, "--write", overridePath),
+    ).resolves.toMatchObject({
+      stdout: expect.stringContaining("102 operations across 19 domains"),
     });
   });
 
@@ -306,55 +351,221 @@ describe("SDK reference generator", () => {
     });
   });
 
-  it("rejects unmatched and duplicate operations", async () => {
+  it.each([
+    "export let generatedMetadata;",
+    "export const generatedMetadata;",
+  ])("skips an exported variable that declares no operation: %s", async (declaration) => {
+    const fixture = await createFixture();
+    const sdkPath = resolve(fixture.directory, "src/generated/sdk.gen.ts");
+    const source = await readFile(sdkPath, "utf8");
+    await writeFile(sdkPath, `${source}\n${declaration}\n`);
+
+    await expect(runGenerator(fixture)).resolves.toMatchObject({
+      stdout: expect.stringContaining("102 operations across 19 domains"),
+    });
+  });
+
+  it("rejects an OpenAPI operation without a generated SDK function", async () => {
     const unmatched = await createFixture();
-    const openApiPath = resolve(unmatched.directory, "openapi.json");
-    const document = JSON.parse(await readFile(openApiPath, "utf8"));
-    document.paths["/v1/test-only"] = {
-      get: {
-        operationId: "test_only",
-        responses: { 200: { description: "OK" } },
-        security: [{ BearerAuth: [] }],
-        summary: "Test only",
-        tags: ["Accounts"],
-      },
-    };
-    await writeFile(openApiPath, JSON.stringify(document));
+    await mutateOpenApi(unmatched, (document) => {
+      document.paths["/v1/test-only"] = {
+        get: {
+          operationId: "test_only",
+          responses: { 200: { description: "OK" } },
+          security: [{ BearerAuth: [] }],
+          summary: "Test only",
+          tags: ["Accounts"],
+        },
+      };
+    });
 
     await expect(runGenerator(unmatched)).rejects.toMatchObject({
       stderr: expect.stringContaining(
         "OpenAPI operation GET /v1/test-only has no generated SDK function",
       ),
     });
+  });
 
+  it("rejects duplicate generated operations", async () => {
     const duplicate = await createFixture();
-    const sdkPath = resolve(duplicate.directory, "src/generated/sdk.gen.ts");
-    const sdkSource = await readFile(sdkPath, "utf8");
-    const start = sdkSource.indexOf("export const accounts =");
-    const end = sdkSource.indexOf("/**", start);
-    expect(start).toBeGreaterThanOrEqual(0);
-    expect(end).toBeGreaterThan(start);
-    const declaration = sdkSource
-      .slice(start, end)
-      .replace("export const accounts =", "export const accountsDuplicate =");
-    await writeFile(sdkPath, `${sdkSource}\n${declaration}`);
+    await appendAccountsOperation(duplicate, "accountsDuplicate");
 
     await expect(runGenerator(duplicate)).rejects.toMatchObject({
       stderr: expect.stringContaining(
-        "Duplicate generated SDK operation: GET /v1/accounts",
+        "Duplicate generated operation GET /v1/accounts",
+      ),
+    });
+  });
+
+  it("rejects a generated SDK function whose route is absent from OpenAPI", async () => {
+    const fixture = await createFixture();
+    await appendAccountsOperation(fixture, "sdkOnly", "/v1/sdk-only");
+
+    await expect(runGenerator(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "Generated SDK function sdkOnly has no OpenAPI operation: GET /v1/sdk-only",
+      ),
+    });
+  });
+
+  it.each([
+    [
+      "123getURL",
+      "OpenAPI operation 123getURL generates 123GetUrl, which the generator sanitizes",
+    ],
+    [
+      "verify_2fa",
+      "OpenAPI operation GET /v1/accounts maps to verify2Fa, not accounts",
+    ],
+    [
+      "get_3ds_status",
+      "OpenAPI operation GET /v1/accounts maps to get3DsStatus, not accounts",
+    ],
+    [
+      "get_sha256hash",
+      "OpenAPI operation GET /v1/accounts maps to getSha256Hash, not accounts",
+    ],
+    [
+      "list_ipv4addresses",
+      "OpenAPI operation GET /v1/accounts maps to listIpv4Addresses, not accounts",
+    ],
+    [
+      "pay_per_use_a1url",
+      "OpenAPI operation GET /v1/accounts maps to payPerUseA1Url, not accounts",
+    ],
+    ["a3a", "OpenAPI operation GET /v1/accounts maps to a3A, not accounts"],
+    [
+      "a$&",
+      "OpenAPI operation a$& generates a$&, which the generator sanitizes",
+    ],
+    [
+      "fetch",
+      "OpenAPI operation fetch generates fetch, which the generator reserves and would suffix",
+    ],
+  ])("uses generator naming for operationId %s", async (operationId, message) => {
+    const fixture = await createFixture();
+    await mutateOpenApi(fixture, (document) => {
+      document.paths["/v1/accounts"].get.operationId = operationId;
+    });
+
+    await expect(runGenerator(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(message),
+    });
+  });
+
+  it.each([
+    "a3a.",
+    "a.b",
+  ])("rejects nested operationId %s before naming", async (operationId) => {
+    const fixture = await createFixture();
+    await mutateOpenApi(fixture, (document) => {
+      document.paths["/v1/accounts"].get.operationId = operationId;
+    });
+
+    await expect(runGenerator(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        `OpenAPI operation ${operationId} carries a nesting delimiter, which the generator normalizes before naming, and this module does not model that normalization`,
+      ),
+    });
+  });
+
+  it("rejects operationIds that collide under the pinned operation profile", async () => {
+    const fixture = await createFixture();
+    await mutateOpenApi(fixture, (document) => {
+      const operation = document.paths["/v1/accounts"].get;
+      document.paths = {
+        "/collision-a": {
+          get: { ...operation, operationId: "a3ß" },
+        },
+        "/collision-b": {
+          get: { ...operation, operationId: "a3_ß" },
+        },
+      };
+    });
+
+    await expect(runGenerator(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "OpenAPI operations a3ß and a3_ß both generate a3SS",
+      ),
+    });
+  });
+
+  it("rejects a legal operationId that maps to a different SDK name", async () => {
+    const fixture = await createFixture();
+    await mutateOpenApi(fixture, (document) => {
+      document.paths["/v1/accounts"].get.operationId = "account_list";
+    });
+
+    await expect(runGenerator(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "OpenAPI operation GET /v1/accounts maps to accountList, not accounts: src/generated is stale — run pnpm run generate. If it is current, this cross-check's naming assumption no longer holds and the check should be dropped.",
       ),
     });
   });
 
   it("rejects an OpenAPI operation without responses", async () => {
     const fixture = await createFixture();
-    const openApiPath = resolve(fixture.directory, "openapi.json");
-    const document = JSON.parse(await readFile(openApiPath, "utf8"));
-    delete document.paths["/v1/accounts"].get.responses;
-    await writeFile(openApiPath, JSON.stringify(document));
+    await mutateOpenApi(fixture, (document) => {
+      delete document.paths["/v1/accounts"].get.responses;
+    });
 
     await expect(runGenerator(fixture)).rejects.toMatchObject({
       stderr: expect.stringContaining("must have responses"),
+    });
+  });
+
+  it("rejects an OpenAPI document with no operations", async () => {
+    const fixture = await createFixture();
+    await mutateOpenApi(fixture, (document) => {
+      document.paths = {};
+    });
+
+    await expect(runGenerator(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining("OpenAPI document has no operations"),
+    });
+  });
+
+  it.each([
+    "null",
+    "[]",
+    "42",
+  ])("rejects non-object OpenAPI document %s", async (source) => {
+    const fixture = await createFixture();
+    await writeFile(resolve(fixture.directory, "openapi.json"), source);
+
+    await expect(runGenerator(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining("OpenAPI document must be an object"),
+    });
+  });
+
+  it("rejects a malformed bearer scheme with only anonymous operations", async () => {
+    const fixture = await createFixture();
+    await mutateOpenApi(fixture, (document) => {
+      document.paths = { "/v1/accounts": document.paths["/v1/accounts"] };
+      document.security = [];
+      delete document.paths["/v1/accounts"].get.security;
+      document.components.securitySchemes.BearerAuth = { type: "apiKey" };
+    });
+
+    await expect(runGenerator(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "OpenAPI components.securitySchemes.BearerAuth must be an HTTP bearer scheme",
+      ),
+    });
+  });
+
+  it("rejects path-item references instead of omitting their operations", async () => {
+    const fixture = await createFixture();
+    await mutateOpenApi(fixture, (document) => {
+      document.paths["/referenced"] = {
+        $ref: "#/components/pathItems/Referenced",
+      };
+    });
+
+    await expect(runGenerator(fixture)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "OpenAPI path item /referenced uses an unsupported reference; it must be resolved before generation",
+      ),
     });
   });
 

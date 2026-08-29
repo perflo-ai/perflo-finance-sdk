@@ -142,12 +142,13 @@ export interface PayVendorSafelyOptions {
   signal?: AbortSignal;
 }
 
-// The `in` checks differ from `Object.hasOwn` only for an inherited key (which passes) or a
+// The `in` checks differ from `Object.hasOwn` for an inherited key (which passes) or a
 // Proxy whose `has` trap denies a real key (which rejects); a trap that claims a key cannot pass
 // on its own, because the reads that follow still need a real object with a string `code`.
-// This guard reads `result.error`, which is `JSON.parse` of the error body, so decoded server
-// JSON produces neither; only a caller-registered error interceptor could. The guard
-// deliberately does not defend against that trusted-input case.
+// This guard reads `result.error`: the decoded error body, its raw text, or whatever the request
+// threw. Only caller-supplied code could produce either divergence: an error interceptor's
+// replacement, a custom `fetch`, or a request interceptor. The guard deliberately does not defend
+// against that trusted-input case.
 function isPayPerUseErrorEnvelope(value: unknown): value is PayPerUseError {
   if (!isRecord(value) || !("error" in value)) {
     return false;
@@ -473,8 +474,8 @@ async function recoverTransaction(options: {
  * 40-second attempts, 1 + 2 + 4 seconds of backoff, and 60 seconds of
  * transaction reads. A `Retry-After` on a 429 or a `poll.afterMs` on an open
  * view can each add up to 60 seconds per replay; `deadlineMs` is the only
- * overall wall-clock bound. Every same-key replay has to land inside the
- * idempotency replay window that `GET /v1/identity` publishes as
+ * caller-set overall wall-clock bound. Every same-key replay has to land inside
+ * the idempotency replay window that `GET /v1/identity` publishes as
  * `idempotency_replay_window_seconds`; the helper's bounded wall time is designed
  * to keep it there, and `deadlineMs` is the bound to lower when you need a
  * tighter one.
