@@ -592,8 +592,8 @@ describe("runMutationWorkflow", () => {
         throw new Error("transport echoed agent-secret");
       },
       payPerUseRejectBulkSubAccountDeletion: () => ({
-        error: { code: "METHOD_NOT_ALLOWED" },
-        response: new Response(null, { status: 405 }),
+        error: { code: "ACCOUNT_KEY_REQUIRED" },
+        response: new Response(null, { status: 403 }),
       }),
       payPerUseRevokeAgentKey: revokeAgentKey,
       payPerUseListAgentKeys: () => ({
@@ -713,8 +713,8 @@ describe("runMutationWorkflow", () => {
         response: new Response(null, { status: 200 }),
       }),
       payPerUseRejectBulkSubAccountDeletion: () => ({
-        error: { code: "METHOD_NOT_ALLOWED" },
-        response: new Response(null, { status: 405 }),
+        error: { code: "ACCOUNT_KEY_REQUIRED" },
+        response: new Response(null, { status: 403 }),
       }),
       payVendorSafely: async () => ({
         data: {
@@ -1247,7 +1247,7 @@ describe("reconcileRun", () => {
         data: {
           data: {
             chargeIsFinal: true,
-            id: "transaction-1",
+            id: "ledger-entry-1",
             status: "succeeded",
             terminal: true,
           },

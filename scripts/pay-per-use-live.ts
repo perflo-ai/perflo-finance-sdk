@@ -1436,7 +1436,6 @@ async function pollOwnTransaction(
     const value = envelopeData(read.result?.data);
     if (!isRecord(value) || read.record.behavior !== "success") return;
     const transaction = value as unknown as PayPerUseTransactionView;
-    if (transaction.id !== transactionId) return;
     if (transaction.terminal) return transaction;
     await delay(2_000);
   }
@@ -1939,7 +1938,7 @@ export async function runMutationWorkflow(
             client: agentClient,
             signal: signal(),
           }),
-        exactRefusal(405, "METHOD_NOT_ALLOWED"),
+        exactRefusal(403, "ACCOUNT_KEY_REQUIRED"),
       );
       if (
         callerKey.record.behavior !== "success" ||
