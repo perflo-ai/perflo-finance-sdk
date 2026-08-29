@@ -159,6 +159,26 @@ The helper creates or accepts one `Idempotency-Key`, returns it on every data re
 
 A caller abort returns `PollAbortedError` unless a terminal result had already landed — a `settled`, `confirmation_required`, or `recovered` result is returned even when the signal aborted in the same turn; narrow it with `isPollAbortedError` and read `lastValue` for the payment identifier when one was seen; the outcome also carries the last attempt's or read's `request` and `response` when one was made. The helper is bounded in attempts; with defaults, no server-supplied waits, and no `deadlineMs`, the worst-case wall time is about 227 seconds. A `Retry-After` on a `429` or a `poll.afterMs` on an open view can each add up to 60 seconds per replay; `deadlineMs` is the only caller-set overall wall-clock bound. Every same-key replay has to land inside the idempotency replay window that `GET /v1/identity` publishes as `idempotency_replay_window_seconds`; the helper's bounded wall time is designed to keep it there, and `deadlineMs` is the bound to lower when you need a tighter one.
 
+## Exercise the complete pay-per-use workflow
+
+The repository's [pay-per-use live exercise](https://github.com/perflo-ai/perflo-finance-sdk/blob/master/scripts/pay-per-use-live.ts) inventories every `payPerUse*` export, validates live responses against `openapi.json`, and reports successful behavior, expected credential or method refusals, blocked prerequisites, and contract failures separately. Its default is read-only:
+
+```bash
+export PERFLO_ACCOUNT_KEY="account_key_from_the_spending_page"
+pnpm run test:pay-per-use
+```
+
+Pass `--mutations` to create, inspect, revoke, and disable one UUID-owned test sub-account and agent key. Add `--spend` to make one payment through that agent key. The sub-account's hourly and lifetime caps equal `PERFLO_LIVE_MAX_CHARGE`, which defaults to USD 0.01:
+
+```bash
+pnpm run test:pay-per-use -- --mutations
+pnpm run test:pay-per-use -- --mutations --spend
+```
+
+Every mutation is recorded in an owner-only journal before dispatch. The script refuses writes when the read-only contract preflight fails or a previous journal is unresolved. Run `pnpm run test:pay-per-use -- --reconcile` after an interrupted run; reconciliation reads existing state and never starts another payment. The account key and one-time agent-key secret are neither logged nor journaled.
+
+Set `PERFLO_SDK_ENTRY`, `PERFLO_SDK_PACKAGE_JSON`, `PERFLO_OPENAPI_PATH`, and `PERFLO_EXPECTED_SDK_VERSION` to audit an extracted release artifact instead of the repository build. `--help` lists every option and override.
+
 ## Check a verification URL
 
 A `kyc_session` action carries an HTTPS URL to open in the customer's browser. `isAllowedVerificationUrl(value)` decides whether that URL is one a browser may be sent to, and it is the same rule the API enforces on a `kyc_session` action's `url`:

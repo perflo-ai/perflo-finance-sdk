@@ -41,6 +41,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "pnpm run generate && pnpm run build && vitest run",
     "test:live": "node scripts/live-api.ts",
+    "test:pay-per-use": "pnpm run build && node scripts/pay-per-use-live.ts",
     "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node tests/fixtures/node-esm.mjs && pnpm run check:workerd",
     "check:workerd": "node scripts/check-workerd.mjs",
     "prepack": "pnpm run generate && pnpm run build",
@@ -51,6 +52,7 @@
     "@biomejs/biome": "2.4.11",
     "@cloudflare/vitest-pool-workers": "0.20.2",
     "@hey-api/openapi-ts": "0.99.0",
+    "@hyperjump/json-schema": "1.17.8",
     "@types/node": "26.1.1",
     "typescript": "5.9.3",
     "vitest": "4.1.10"

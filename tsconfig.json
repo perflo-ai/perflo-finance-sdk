@@ -16,6 +16,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true,
     "types": ["node", "vitest/globals"]
@@ -23,7 +24,7 @@
   "include": [
     "src",
     "tests",
-    "scripts/live-api.ts",
+    "scripts/**/*.ts",
     "vitest.config.ts",
     "openapi-ts.config.ts"
   ],
