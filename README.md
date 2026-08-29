@@ -175,7 +175,7 @@ pnpm run test:pay-per-use -- --mutations
 pnpm run test:pay-per-use -- --mutations --spend
 ```
 
-Every mutation is recorded in an owner-only journal before dispatch. The script refuses writes when the read-only contract preflight fails or a previous journal is unresolved. Run `pnpm run test:pay-per-use -- --reconcile` after an interrupted run; reconciliation reads existing state and never starts another payment. The account key and one-time agent-key secret are neither logged nor journaled.
+The exercise records every mutation in an owner-only journal before dispatch. The script refuses writes when the read-only contract preflight fails or a previous journal is unresolved. Run `pnpm run test:pay-per-use -- --reconcile` after an interrupted run; reconciliation reads existing state and never starts another payment. The account key and one-time agent-key secret are neither logged nor journaled.
 
 Set `PERFLO_SDK_ENTRY`, `PERFLO_SDK_PACKAGE_JSON`, `PERFLO_OPENAPI_PATH`, and `PERFLO_EXPECTED_SDK_VERSION` to audit an extracted release artifact instead of the repository build. `--help` lists every option and override.
 

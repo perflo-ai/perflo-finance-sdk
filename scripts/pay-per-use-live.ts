@@ -95,7 +95,6 @@ interface RunOptions {
 interface Runtime {
   entrySha256: string;
   openapi: OpenApiDocument;
-  openapiPath: string;
   openapiSha256: string;
   openapiSource: string;
   packageName: string;
@@ -705,7 +704,6 @@ export async function loadRuntime(
   return {
     entrySha256: createHash("sha256").update(sdkEntrySource).digest("hex"),
     openapi: JSON.parse(openapiSource) as OpenApiDocument,
-    openapiPath,
     openapiSha256: createHash("sha256").update(openapiSource).digest("hex"),
     openapiSource,
     packageName,
@@ -1806,7 +1804,6 @@ export async function runMutationWorkflow(
     );
     await writeJournal(journalPath, journal);
 
-    let agentSecret: string | undefined;
     try {
       journal.subAccount.phase = "dispatching";
       await writeJournal(journalPath, journal);
@@ -1899,7 +1896,7 @@ export async function runMutationWorkflow(
       );
       const createdKeyData = envelopeData(createdAgentKey.result?.data);
       journal.agentKey.id = readString(createdKeyData, "id");
-      agentSecret = readString(createdKeyData, "key");
+      const agentSecret = readString(createdKeyData, "key");
       context.addSecret(agentSecret);
       if (!journal.agentKey.id && !isDefinitiveFailure(createdAgentKey)) {
         journal.agentKey.id = await recoverAgentKeyId(context, journal);
@@ -2229,13 +2226,9 @@ export async function main(
   if (inventoryErrors.length > 0) return 1;
   if (options.reconcile) {
     await reconcileRun(context, runtime, environment);
-    return Math.max(
-      inventoryErrors.length > 0 ? 1 : 0,
-      summarize(context, runtime, options),
-    );
+    return summarize(context, runtime, options);
   }
   const preflight = await runPreflight(context);
-  preflight.failures.push(...inventoryErrors);
   if (options.mutations) {
     await runMutationWorkflow(
       context,
@@ -2245,10 +2238,7 @@ export async function main(
       environment,
     );
   }
-  return Math.max(
-    inventoryErrors.length > 0 ? 1 : 0,
-    summarize(context, runtime, options),
-  );
+  return summarize(context, runtime, options);
 }
 
 export async function runWithRedactedErrors(
