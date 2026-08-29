@@ -3953,12 +3953,22 @@
             "type": "string"
           },
           "priceRange": {
-            "$ref": "#/components/schemas/PayPerUsePriceRange",
-            "description": "The listed price range."
+            "description": "The listed price range, or null when no vendor is available.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PayPerUsePriceRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "primaryVendor": {
-            "description": "The primary vendor identifier.",
-            "type": "string"
+            "description": "The primary vendor identifier, or null when no vendor is available.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "slug": {
             "description": "The category identifier.",
@@ -4608,25 +4618,30 @@
         "type": "object"
       },
       "PayPerUseListCapabilitiesListMeta": {
-        "description": "Counts returned with the capability menu.",
+        "description": "Pagination metadata returned with the capability menu.",
         "properties": {
-          "categoryCount": {
-            "description": "The number of returned categories.",
+          "limit": {
+            "description": "The applied result limit.",
             "type": "integer"
           },
-          "groupCount": {
-            "description": "The number of returned groups.",
+          "offset": {
+            "description": "The applied result offset.",
             "type": "integer"
           },
           "requestId": {
             "description": "The request identifier.",
             "type": "string"
+          },
+          "total": {
+            "description": "The total number of matching capabilities.",
+            "type": "integer"
           }
         },
         "required": [
           "requestId",
-          "groupCount",
-          "categoryCount"
+          "total",
+          "limit",
+          "offset"
         ],
         "type": "object"
       },
@@ -5101,7 +5116,10 @@
           },
           "explorer": {
             "description": "The transaction explorer URL when stated.",
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "flow": {
             "description": "The settlement flow.",
@@ -5392,32 +5410,15 @@
         ],
         "type": "object"
       },
-      "PayPerUseSearchVendorsResponseBody": {
-        "description": "Vendor matches for the supplied query, with the request metadata.",
-        "properties": {
-          "data": {
-            "description": "The operation result.",
-            "items": {
-              "$ref": "#/components/schemas/PayPerUseVendorSummary"
-            },
-            "type": "array"
-          },
-          "meta": {
-            "$ref": "#/components/schemas/PayPerUseMeta",
-            "description": "Request metadata."
-          }
-        },
-        "required": [
-          "data",
-          "meta"
-        ],
-        "type": "object"
-      },
-      "PayPerUseSearchVendorsWithBodyListMeta": {
-        "description": "Counts returned by body-based discovery.",
+      "PayPerUseSearchVendorsListMeta": {
+        "description": "Pagination metadata returned with vendor matches.",
         "properties": {
           "limit": {
             "description": "The applied result limit.",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "The applied result offset.",
             "type": "integer"
           },
           "requestId": {
@@ -5432,7 +5433,29 @@
         "required": [
           "requestId",
           "total",
-          "limit"
+          "limit",
+          "offset"
+        ],
+        "type": "object"
+      },
+      "PayPerUseSearchVendorsResponseBody": {
+        "description": "Vendor matches for the supplied query, with the request metadata.",
+        "properties": {
+          "data": {
+            "description": "The operation result.",
+            "items": {
+              "$ref": "#/components/schemas/PayPerUseVendorSummary"
+            },
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PayPerUseSearchVendorsListMeta",
+            "description": "Pagination metadata."
+          }
+        },
+        "required": [
+          "data",
+          "meta"
         ],
         "type": "object"
       },
@@ -5465,8 +5488,8 @@
             "type": "array"
           },
           "meta": {
-            "$ref": "#/components/schemas/PayPerUseSearchVendorsWithBodyListMeta",
-            "description": "Request metadata."
+            "$ref": "#/components/schemas/PayPerUseSearchVendorsListMeta",
+            "description": "Pagination metadata."
           }
         },
         "required": [
@@ -5820,18 +5843,28 @@
         "type": "object"
       },
       "PayPerUseVendor": {
-        "description": "A vendor, its price, and its input and output hints.",
+        "description": "A vendor, its price, and its available request metadata.",
         "properties": {
           "capability": {
-            "description": "The capability identifier.",
-            "type": "string"
+            "description": "The capability identifier, or null when no capability is assigned.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "description": {
             "description": "What the vendor does.",
             "type": "string"
           },
+          "docsUrl": {
+            "description": "The vendor documentation URL, or null when it is not stated.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "iconUrl": {
-            "description": "The icon URL.",
+            "description": "The icon URL when stated.",
             "type": "string"
           },
           "input": {
@@ -5839,8 +5872,11 @@
             "properties": {
               "example": {
                 "additionalProperties": true,
-                "description": "An example input.",
-                "type": "object"
+                "description": "An example input, or null when none is stated.",
+                "type": [
+                  "object",
+                  "null"
+                ]
               },
               "fields": {
                 "description": "The accepted fields.",
@@ -5868,8 +5904,11 @@
             "type": "array"
           },
           "latencyMsP50": {
-            "description": "The median latency in milliseconds.",
-            "type": "integer"
+            "description": "The median latency in milliseconds, or null when it is not stated.",
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "maxChargePerCall": {
             "$ref": "#/components/schemas/PayPerUseMoney",
@@ -5904,6 +5943,13 @@
             "description": "Whether the payment pauses for confirmation.",
             "type": "boolean"
           },
+          "schemaConfidence": {
+            "description": "The confidence assigned to the input schema, or null when it is not stated.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "slug": {
             "description": "The vendor identifier.",
             "type": "string"
@@ -5917,19 +5963,14 @@
           "slug",
           "name",
           "description",
-          "iconUrl",
           "capability",
           "keywords",
           "price",
           "maxChargePerCall",
           "pricingUnit",
-          "successRate",
           "latencyMsP50",
           "payable",
-          "isResourceStorage",
-          "requiresConfirmation",
-          "input",
-          "output"
+          "input"
         ],
         "type": "object"
       },
@@ -5976,8 +6017,11 @@
         "description": "A matching vendor summary.",
         "properties": {
           "capability": {
-            "description": "The capability identifier.",
-            "type": "string"
+            "description": "The capability identifier, or null when no capability is assigned.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "description": {
             "description": "What the vendor does.",
@@ -5992,8 +6036,11 @@
             "type": "boolean"
           },
           "latencyMsP50": {
-            "description": "The median latency in milliseconds.",
-            "type": "integer"
+            "description": "The median latency in milliseconds, or null when it is not stated.",
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "maxChargePerCall": {
             "$ref": "#/components/schemas/PayPerUseMoney",
@@ -8341,6 +8388,16 @@
             },
             "description": "INVALID_REQUEST when the relayed request is structurally ambiguous."
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayPerUseError"
+                }
+              }
+            },
+            "description": "Error codes: UNAUTHENTICATED."
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -8467,6 +8524,26 @@
             },
             "description": "INVALID_REQUEST when the relayed request is structurally ambiguous."
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayPerUseError"
+                }
+              }
+            },
+            "description": "Error codes: UNAUTHENTICATED."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayPerUseError"
+                }
+              }
+            },
+            "description": "Error codes: ACCOUNT_KEY_REQUIRED."
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -8562,6 +8639,16 @@
               }
             },
             "description": "INVALID_REQUEST when the relayed request is structurally ambiguous."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayPerUseError"
+                }
+              }
+            },
+            "description": "Error codes: UNAUTHENTICATED."
           },
           "403": {
             "content": {
@@ -10836,9 +10923,10 @@
                         }
                       ],
                       "meta": {
-                        "categoryCount": 6,
-                        "groupCount": 2,
-                        "requestId": "b91c4e2a-\u2026"
+                        "limit": 2,
+                        "offset": 0,
+                        "requestId": "b91c4e2a-\u2026",
+                        "total": 2
                       }
                     }
                   },
@@ -11039,9 +11127,10 @@
                         }
                       ],
                       "meta": {
-                        "categoryCount": 6,
-                        "groupCount": 2,
-                        "requestId": "b91c4e2a-\u2026"
+                        "limit": 2,
+                        "offset": 0,
+                        "requestId": "b91c4e2a-\u2026",
+                        "total": 2
                       }
                     }
                   }
@@ -20593,7 +20682,10 @@
                         }
                       ],
                       "meta": {
-                        "requestId": "01J8Z4K7QW3M9V2P"
+                        "limit": 1,
+                        "offset": 0,
+                        "requestId": "01J8Z4K7QW3M9V2P",
+                        "total": 1
                       }
                     }
                   }
@@ -20685,7 +20777,6 @@
                         {
                           "capability": "web_search",
                           "description": "Live web search returning ranked pages with title, URL and excerpt.",
-                          "iconUrl": "https://cdn.perflo.ai/vendors/stableenrich.png",
                           "isPrimary": true,
                           "latencyMsP50": 840,
                           "maxChargePerCall": {
@@ -20735,6 +20826,7 @@
                       ],
                       "meta": {
                         "limit": 2,
+                        "offset": 0,
                         "requestId": "\u2026",
                         "total": 7
                       }
@@ -23247,12 +23339,10 @@
                       "data": {
                         "capability": "web_search",
                         "description": "Live web search returning ranked pages with title, URL and excerpt.",
+                        "docsUrl": null,
                         "iconUrl": "https://cdn.perflo.ai/vendors/stableenrich.png",
                         "input": {
-                          "example": {
-                            "limit": 5,
-                            "query": "x402 protocol adoption"
-                          },
+                          "example": null,
                           "fields": [
                             {
                               "description": "Search query to find relevant web pages",
@@ -23271,7 +23361,6 @@
                             }
                           ]
                         },
-                        "isResourceStorage": false,
                         "keywords": [
                           "search",
                           "web",
@@ -23283,32 +23372,14 @@
                           "currency": "USD"
                         },
                         "name": "StableEnrich: Firecrawl Search",
-                        "output": {
-                          "example": {
-                            "results": [
-                              {
-                                "excerpt": "Adoption grew sharply after\u2026",
-                                "title": "x402 adoption in 2026",
-                                "url": "https://example.com/x402-2026"
-                              }
-                            ]
-                          },
-                          "note": "Shape is the vendor's, captured from the most recent successful call. Treat as a hint, not a contract."
-                        },
                         "payable": true,
                         "price": {
                           "amount": "0.0252",
                           "currency": "USD"
                         },
                         "pricingUnit": "call",
-                        "requiresConfirmation": false,
-                        "slug": "stableenrich-firecrawl-search",
-                        "successRate": {
-                          "last24h": 0.98,
-                          "last7d": 0.97,
-                          "last90d": 0.96,
-                          "sampleSize": 412
-                        }
+                        "schemaConfidence": "high",
+                        "slug": "stableenrich-firecrawl-search"
                       },
                       "meta": {
                         "requestId": "\u2026"

@@ -4,6 +4,25 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+## 0.1.0-beta.17 - 2026-08-29
+
+- Aligned the pay-per-use response types with the live catalog and transaction
+  shapes. `PayPerUseListCapabilitiesListMeta` now carries `total`, `limit`, and
+  `offset` instead of `groupCount` and `categoryCount`.
+  `PayPerUseSearchVendorsWithBodyListMeta` is replaced by
+  `PayPerUseSearchVendorsListMeta`, which is used by both search forms and adds
+  `offset`. `PayPerUseVendorSummary.capability` and
+  `PayPerUseVendor.capability` can be null; category `primaryVendor` and
+  `priceRange` can be null when no vendor is available;
+  `PayPerUseVendor.input.example` can be null; `iconUrl`, `successRate`,
+  `isResourceStorage`, `requiresConfirmation`, and `output` are optional on the
+  full vendor view; the view adds nullable `docsUrl` and `schemaConfidence`;
+  vendor latency can be null when it is not stated;
+  and `PayPerUsePaymentSettlement.explorer` can be null (breaking)
+- Added the deployed `401 UNAUTHENTICATED` account-key lifecycle responses and
+  the `403 ACCOUNT_KEY_REQUIRED` account-key metadata response to the generated
+  error unions (additive)
+
 ## 0.1.0-beta.15 - 2026-08-27
 
 - Renamed the 23 pay-per-use operations from the `agent*` method family to the

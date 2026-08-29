@@ -1001,14 +1001,13 @@ async function runPreflight(context: RunContext): Promise<PreflightState> {
     !vendor ||
     vendor.payable !== true ||
     vendor.pricingUnit !== "call" ||
-    vendor.requiresConfirmation !== false ||
-    vendor.isResourceStorage !== false ||
+    vendor.requiresConfirmation === true ||
     vendorMaxCharge?.currency !== context.maxCharge.currency ||
     typeof vendorMaxCharge.amount !== "string" ||
     Number(vendorMaxCharge.amount) > Number(context.maxCharge.amount)
   ) {
     failures.push(
-      "vendor is not a contract-valid payable per-call, no-confirmation, non-resource service",
+      "vendor is not a contract-valid payable per-call service within the configured charge bound",
     );
   }
   return {
