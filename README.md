@@ -7,8 +7,8 @@ Use `@perflo/finance-sdk` from Node.js, browsers, or Cloudflare Workers to call 
 Set the release location once in your shell:
 
 ```bash
-sdk_version="v0.1.0-beta.16"
-sdk_archive="perflo-finance-sdk-0.1.0-beta.16.tgz"
+sdk_version="v0.1.0-beta.17"
+sdk_archive="perflo-finance-sdk-0.1.0-beta.17.tgz"
 sdk_releases="https://github.com/perflo-ai/perflo-finance-sdk/releases"
 ```
 
