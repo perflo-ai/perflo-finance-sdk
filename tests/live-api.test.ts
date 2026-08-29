@@ -1664,6 +1664,7 @@ describe("live API exercise safety", () => {
   });
 
   it("aborts connection and operation HTTP calls at their deadlines", async () => {
+    const requestDeadlineMs = 250;
     let requests = 0;
     const server = createServer(() => {
       requests += 1;
@@ -1684,7 +1685,7 @@ describe("live API exercise safety", () => {
         ensurePerfloConnection(
           client,
           { perflo_connection: "not_connected" } as never,
-          40,
+          requestDeadlineMs,
           async () => undefined,
         ),
       ).rejects.toThrow(/connection start failed/);
@@ -1695,7 +1696,7 @@ describe("live API exercise safety", () => {
         followOperation(
           client,
           operationFixture() as never,
-          40,
+          requestDeadlineMs,
           async () => undefined,
         ),
       ).rejects.toThrow(/operation read failed/);

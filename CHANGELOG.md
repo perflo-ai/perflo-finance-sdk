@@ -4,6 +4,18 @@ This changelog records user-visible changes to `@perflo/finance-sdk`.
 
 ## Unreleased
 
+## 0.1.0-beta.18 - 2026-08-29
+
+- Added the deployed `403 ACCOUNT_KEY_REQUIRED` response to
+  `payPerUseRejectBulkSubAccountDeletion`. An agent key is refused before the
+  route's `405 METHOD_NOT_ALLOWED` response (additive)
+- Updated the committed pay-per-use live exercise to treat that
+  credential-specific `403` as the expected pre-payment safety refusal
+- Made `PayPerUsePaymentSource.errorMessage` optional because a successful
+  payment can carry an `upstream` result with only `httpStatus` (breaking)
+- Fixed live reconciliation when a payment's `transactionId` resolves a
+  transaction view whose ledger `id` is different
+
 ## 0.1.0-beta.17 - 2026-08-29
 
 - Aligned the pay-per-use response types with the live catalog and transaction

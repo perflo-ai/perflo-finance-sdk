@@ -4963,7 +4963,7 @@
           },
           "upstream": {
             "$ref": "#/components/schemas/PayPerUsePaymentSource",
-            "description": "The remote result when a call failed."
+            "description": "The remote HTTP result when stated."
           },
           "upstreamStatus": {
             "description": "The returned vendor HTTP status.",
@@ -5160,10 +5160,10 @@
         "type": "object"
       },
       "PayPerUsePaymentSource": {
-        "description": "The remote HTTP result recorded for a failed payment.",
+        "description": "The remote HTTP result recorded for a payment.",
         "properties": {
           "errorMessage": {
-            "description": "The returned error message.",
+            "description": "The returned error message when stated.",
             "type": "string"
           },
           "httpStatus": {
@@ -5172,8 +5172,7 @@
           }
         },
         "required": [
-          "httpStatus",
-          "errorMessage"
+          "httpStatus"
         ],
         "type": "object"
       },
@@ -21951,7 +21950,7 @@
     },
     "/v1/sub-accounts": {
       "delete": {
-        "description": "Always returns METHOD_NOT_ALLOWED; sub-accounts are disabled one at a time.",
+        "description": "An agent key returns ACCOUNT_KEY_REQUIRED. A credential allowed to manage sub-accounts returns METHOD_NOT_ALLOWED; sub-accounts are disabled one at a time.",
         "operationId": "pay_per_use_reject_bulk_sub_account_deletion",
         "responses": {
           "400": {
@@ -21963,6 +21962,16 @@
               }
             },
             "description": "INVALID_REQUEST when the relayed request is structurally ambiguous."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayPerUseError"
+                }
+              }
+            },
+            "description": "Error codes: ACCOUNT_KEY_REQUIRED."
           },
           "404": {
             "content": {
